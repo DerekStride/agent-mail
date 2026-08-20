@@ -34,8 +34,8 @@ pub struct SendArgs {
     #[arg(long, value_name = "ID")]
     pub to: String,
 
-    /// Sender ID; defaults to AGENT_MAIL_FROM or "unknown"
-    #[arg(long, value_name = "ID", env = "AGENT_MAIL_FROM")]
+    /// Sender ID; defaults to AGENT_MAIL_ID or "unknown"
+    #[arg(long, value_name = "ID")]
     pub from: Option<String>,
 
     /// Address to use when composing a reply

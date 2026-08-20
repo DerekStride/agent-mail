@@ -44,6 +44,8 @@ The default mail root is `/tmp/agent-mail`; override it with `AGENT_MAIL_ROOT`.
 
 agent-mail creates the recipient directory and Maildir on first delivery. If `agent-id` is installed and can resolve the identifier, the slug is used; otherwise the supplied session ID is used directly.
 
+`AGENT_MAIL_ID` is the optional current agent session ID. `send` uses it as the default sender identity and resolves it through `agent-id`; `--from` overrides it.
+
 ```text
 $AGENT_MAIL_ROOT/<recipient>/
 └── inbox/
@@ -84,7 +86,7 @@ Human recipients are intentionally deferred; see the future `sq` task for that f
 
 ## OMP integration
 
-The optional OMP extension injects the current agent identity only into Bash calls that invoke `agent-mail`. It does not modify the parent shell or unrelated Bash commands.
+The optional OMP extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. The command internally resolves that ID through `agent-id`; unrelated Bash commands and the parent shell are untouched.
 
 Link it into the active OMP extension directory:
 

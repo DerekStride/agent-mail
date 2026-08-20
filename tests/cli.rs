@@ -116,7 +116,7 @@ fn agent_id_slug_selects_mailbox_directory() {
     let agent_id = tools.path().join("agent-id");
     fs::write(
         &agent_id,
-        "#!/bin/sh\nprintf '%s\\n' '{\"slug\":\"gienah-oak-darkwood\"}'\n",
+        "#!/bin/sh\nprintf '%s\\n' '{\"version\":1,\"session_id\":\"smoke-session\",\"name\":\"Gienah Oak of Darkwood\",\"slug\":\"gienah-oak-darkwood\",\"first_name\":\"Gienah\",\"family_name\":\"Oak\",\"realm\":\"Darkwood\"}'\n",
     )
     .unwrap();
     let mut permissions = fs::metadata(&agent_id).unwrap().permissions();
@@ -130,9 +130,20 @@ fn agent_id_slug_selects_mailbox_directory() {
 
     command(&root)
         .env("PATH", path)
+        .env("AGENT_MAIL_ID", "smoke-session")
         .args(["send", "--to", "smoke-session", "--body", "hello"])
         .assert()
         .success();
+
+    let message_path = fs::read_dir(root.path().join("gienah-oak-darkwood/inbox/new"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let message = fs::read_to_string(message_path).unwrap();
+    assert!(message.contains("From: Gienah Oak of Darkwood"));
+    assert!(message.contains("To: Gienah Oak of Darkwood"));
 
     assert!(root.path().join("gienah-oak-darkwood/inbox/new").is_dir());
     assert!(!root.path().join("smoke-session").exists());

@@ -37,7 +37,7 @@ Recipients may be supplied as a session ID, canonical agent name, or agent slug.
 
 ## OMP integration
 
-The optional `extensions/agent-mail.ts` extension resolves the current agent identity and injects `AGENT_ID_*` variables only into Bash calls that invoke `agent-mail`. It does not modify the parent shell or unrelated Bash commands. Reload OMP after installing or changing the extension.
+The optional `extensions/agent-mail.ts` extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. The command internally resolves that ID through `agent-id`; unrelated Bash commands and the parent shell are untouched. Reload OMP after installing or changing the extension.
 
 ## Message state
 

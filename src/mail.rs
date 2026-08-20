@@ -16,23 +16,34 @@ use std::fmt::Write as FormatWrite;
 use crate::cli::{ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
 
 pub const MAIL_ROOT_ENV: &str = "AGENT_MAIL_ROOT";
+pub const MAIL_ID_ENV: &str = "AGENT_MAIL_ID";
 const DEFAULT_MAIL_ROOT: &str = "/tmp/agent-mail";
 static MESSAGE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn send(args: &SendArgs) -> Result<()> {
     let root = mail_root();
-    let inbox = resolve_inbox(&root, &args.to)?;
-
-    let sender = args
-        .from
-        .clone()
-        .or_else(|| env::var("AGENT_MAIL_FROM").ok())
+    let mailbox = resolve_mailbox(&root, &args.to)?;
+    let sender_id = args.from.clone().or_else(|| env::var(MAIL_ID_ENV).ok());
+    let sender = sender_id
+        .as_deref()
+        .and_then(agent_id_identity)
+        .map(|identity| identity.name)
+        .or(sender_id)
         .unwrap_or_else(|| "unknown".to_string());
-    let reply_to = args.reply_to.as_deref();
+    let to = mailbox
+        .identity
+        .as_ref()
+        .map(|identity| identity.name.clone())
+        .unwrap_or_else(|| args.to.clone());
+    let reply_to = args.reply_to.as_deref().map(|value| {
+        agent_id_identity(value)
+            .map(|identity| identity.name)
+            .unwrap_or_else(|| value.to_string())
+    });
     let subject = args.subject.as_deref().unwrap_or("(no subject)");
     validate_header("From", &sender)?;
-    validate_header("To", &args.to)?;
-    validate_optional_header("Reply-To", reply_to)?;
+    validate_header("To", &to)?;
+    validate_optional_header("Reply-To", reply_to.as_deref())?;
     validate_header("Subject", subject)?;
     validate_optional_header("In-Reply-To", args.in_reply_to.as_deref())?;
 
@@ -54,8 +65,8 @@ pub fn send(args: &SendArgs) -> Result<()> {
     let msgid = generate_msgid(now);
     let message = format_message(
         &sender,
-        &args.to,
-        reply_to,
+        &to,
+        reply_to.as_deref(),
         now,
         &msgid,
         args.in_reply_to.as_deref(),
@@ -63,7 +74,7 @@ pub fn send(args: &SendArgs) -> Result<()> {
         &body,
     );
 
-    let inbox = ensure_maildir(&inbox)?;
+    let inbox = ensure_maildir(&mailbox.path)?;
     let tmp = inbox.join("tmp").join(format!("{msgid}.md"));
     let destination = inbox.join("new").join(format!("{msgid}.md"));
     let mut file = OpenOptions::new()
@@ -99,10 +110,7 @@ pub fn scan(args: &ScanArgs) -> Result<()> {
     let mut inboxes = if args.all {
         discover_inboxes(&root)?
     } else {
-        vec![resolve_inbox(
-            &root,
-            args.to.as_deref().expect("validated recipient"),
-        )?]
+        vec![resolve_mailbox(&root, args.to.as_deref().expect("validated recipient"))?.path]
     };
     inboxes.sort();
 
@@ -133,7 +141,7 @@ pub fn scan(args: &ScanArgs) -> Result<()> {
 }
 
 pub fn read(args: &ReadArgs) -> Result<()> {
-    let inbox = resolve_inbox(&mail_root(), &args.to)?;
+    let inbox = resolve_mailbox(&mail_root(), &args.to)?.path;
     let message = find_message(&inbox, args.id.as_deref())?
         .with_context(|| format!("no message for '{}'", args.to))?;
 
@@ -198,31 +206,45 @@ fn mail_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_MAIL_ROOT))
 }
 
-fn resolve_inbox(root: &Path, input: &str) -> Result<PathBuf> {
-    validate_component(input, "recipient identifier")?;
-    let mailbox_id = agent_id_slug(input).unwrap_or_else(|| input.to_string());
-    validate_component(&mailbox_id, "mailbox identifier")?;
-    Ok(root.join(mailbox_id).join("inbox"))
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct IdentityAssignment {
+    name: String,
     slug: String,
 }
 
-fn agent_id_slug(input: &str) -> Option<String> {
+#[derive(Debug)]
+struct ResolvedMailbox {
+    path: PathBuf,
+    identity: Option<IdentityAssignment>,
+}
+
+fn resolve_mailbox(root: &Path, input: &str) -> Result<ResolvedMailbox> {
+    validate_component(input, "recipient identifier")?;
+    let identity = agent_id_identity(input);
+    let mailbox_id = identity
+        .as_ref()
+        .map(|assignment| assignment.slug.as_str())
+        .unwrap_or(input);
+    validate_component(mailbox_id, "mailbox identifier")?;
+    Ok(ResolvedMailbox {
+        path: root.join(mailbox_id).join("inbox"),
+        identity,
+    })
+}
+
+fn agent_id_identity(input: &str) -> Option<IdentityAssignment> {
     let output = Command::new("agent-id")
-        .args(["lookup", input, "--json"])
+        .env("AGENT_ID_SESSION_ID", input)
+        .args(["lookup", "--json"])
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-
-    let assignment: IdentityAssignment = serde_json::from_slice(&output.stdout).ok()?;
-    validate_component(&assignment.slug, "agent-id slug")
+    let identity: IdentityAssignment = serde_json::from_slice(&output.stdout).ok()?;
+    validate_component(&identity.slug, "agent-id slug")
         .ok()
-        .map(|_| assignment.slug)
+        .map(|_| identity)
 }
 
 fn validate_component(value: &str, label: &str) -> Result<()> {
@@ -428,7 +450,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
 
         assert_eq!(
-            resolve_inbox(root.path(), "smoke-session").unwrap(),
+            resolve_mailbox(root.path(), "smoke-session").unwrap().path,
             root.path().join("smoke-session/inbox")
         );
     }
@@ -437,7 +459,7 @@ mod tests {
     fn recipient_identifiers_cannot_escape_mail_root() {
         let root = tempfile::tempdir().unwrap();
 
-        let error = resolve_inbox(root.path(), "../escape").unwrap_err();
+        let error = resolve_mailbox(root.path(), "../escape").unwrap_err();
         assert!(error.to_string().contains("invalid recipient identifier"));
     }
 }
