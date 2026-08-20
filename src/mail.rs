@@ -3,33 +3,25 @@ use std::{
     fs::OpenOptions,
     io::{self, Read as IoRead, Write},
     path::{Path, PathBuf},
+    process::Command,
     sync::atomic::{AtomicU64, Ordering},
     time::SystemTime,
 };
 
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use serde::Deserialize;
 use std::fmt::Write as FormatWrite;
 
 use crate::cli::{ReadArgs, ReceiptArgs, SendArgs};
 
 pub const MAIL_ROOT_ENV: &str = "AGENT_MAIL_ROOT";
-const DEFAULT_MAIL_ROOT: &str = "/tmp/agent";
+const DEFAULT_MAIL_ROOT: &str = "/tmp/agent-mail";
 static MESSAGE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn send(args: &SendArgs) -> Result<()> {
     let root = mail_root();
     let inbox = resolve_inbox(&root, &args.to)?;
-    let scratchpad = inbox
-        .parent()
-        .context("recipient inbox has no scratchpad parent")?;
-    if !scratchpad.is_dir() {
-        bail!(
-            "recipient '{}' has no scratchpad at {} (identity layer has not provisioned it)",
-            args.to,
-            scratchpad.display()
-        );
-    }
 
     let sender = args
         .from
@@ -162,60 +154,31 @@ fn mail_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(DEFAULT_MAIL_ROOT))
 }
 
-fn resolve_inbox(root: &Path, id: &str) -> Result<PathBuf> {
-    if id.is_empty() {
-        bail!("recipient ID cannot be empty");
-    }
-
-    if let Some(handle) = human_handle(id) {
-        validate_component(handle, "human handle")?;
-        return Ok(root.join("humans").join(handle).join("inbox"));
-    }
-
-    validate_component(id, "recipient ID")?;
-    let exact = root.join(id);
-    if exact.is_dir() {
-        return Ok(exact.join("inbox"));
-    }
-
-    let prefix = format!("{id}-");
-    let mut matches = Vec::new();
-    for entry in read_dir_or_empty(root)? {
-        let path = entry.path();
-        let is_match = path.is_dir()
-            && entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.starts_with(&prefix));
-        if is_match {
-            matches.push(path.join("inbox"));
-        }
-    }
-
-    match matches.len() {
-        0 => Ok(exact.join("inbox")),
-        1 => Ok(matches.remove(0)),
-        _ => bail!(
-            "ambiguous recipient '{}'; matches: {}",
-            id,
-            matches
-                .iter()
-                .map(|path| path
-                    .parent()
-                    .and_then(Path::file_name)
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("unknown"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    }
+fn resolve_inbox(root: &Path, input: &str) -> Result<PathBuf> {
+    validate_component(input, "recipient identifier")?;
+    let mailbox_id = agent_id_slug(input).unwrap_or_else(|| input.to_string());
+    validate_component(&mailbox_id, "mailbox identifier")?;
+    Ok(root.join(mailbox_id).join("inbox"))
 }
 
-fn human_handle(id: &str) -> Option<&str> {
-    id.strip_prefix("humans/").or_else(|| {
-        id.contains('@')
-            .then(|| id.split('@').next().unwrap_or_default())
-    })
+#[derive(Debug, Deserialize)]
+struct IdentityAssignment {
+    slug: String,
+}
+
+fn agent_id_slug(input: &str) -> Option<String> {
+    let output = Command::new("agent-id")
+        .args(["lookup", input, "--json"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let assignment: IdentityAssignment = serde_json::from_slice(&output.stdout).ok()?;
+    validate_component(&assignment.slug, "agent-id slug")
+        .ok()
+        .map(|_| assignment.slug)
 }
 
 fn validate_component(value: &str, label: &str) -> Result<()> {
@@ -339,15 +302,6 @@ fn discover_inboxes(root: &Path) -> Result<Vec<PathBuf>> {
         if direct.is_dir() {
             inboxes.push(direct);
         }
-
-        if entry.file_name() == "humans" {
-            for human in read_dir_or_empty(&path)? {
-                let inbox = human.path().join("inbox");
-                if human.path().is_dir() && inbox.is_dir() {
-                    inboxes.push(inbox);
-                }
-            }
-        }
     }
     Ok(inboxes)
 }
@@ -406,23 +360,20 @@ mod tests {
     }
 
     #[test]
-    fn bare_name_resolves_a_single_session_prefix() {
+    fn session_id_resolves_to_mailbox_without_identity_tool() {
         let root = tempfile::tempdir().unwrap();
-        fs::create_dir(root.path().join("worker-session")).unwrap();
 
         assert_eq!(
-            resolve_inbox(root.path(), "worker").unwrap(),
-            root.path().join("worker-session/inbox")
+            resolve_inbox(root.path(), "smoke-session").unwrap(),
+            root.path().join("smoke-session/inbox")
         );
     }
 
     #[test]
-    fn ambiguous_prefix_is_rejected() {
+    fn recipient_identifiers_cannot_escape_mail_root() {
         let root = tempfile::tempdir().unwrap();
-        fs::create_dir(root.path().join("worker-one")).unwrap();
-        fs::create_dir(root.path().join("worker-two")).unwrap();
 
-        let error = resolve_inbox(root.path(), "worker").unwrap_err();
-        assert!(error.to_string().contains("ambiguous recipient"));
+        let error = resolve_inbox(root.path(), "../escape").unwrap_err();
+        assert!(error.to_string().contains("invalid recipient identifier"));
     }
 }

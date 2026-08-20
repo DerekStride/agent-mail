@@ -1,8 +1,8 @@
 # agent-mail
 
-`agent-mail` is a local Maildir message bus for coding-agent sessions and humans.
+`agent-mail` is a local Maildir message bus for coding-agent sessions.
 
-It uses ordinary directories and atomic renames instead of a daemon, network service, database, or lockfile. The identity layer is intentionally separate: it provisions recipient directories and supplies IDs; this project only delivers messages and tracks read state.
+It uses ordinary directories and atomic renames instead of a daemon, network service, database, or lockfile. The identity layer is intentionally separate: when available, `agent-id` supplies a human-readable slug; this project owns mailbox directories, message delivery, and read state.
 
 ## Install
 
@@ -40,9 +40,9 @@ agent-mail receipt --help
 
 ## Storage model
 
-The default mail root is `/tmp/agent`; override it with `AGENT_MAIL_ROOT`.
+The default mail root is `/tmp/agent-mail`; override it with `AGENT_MAIL_ROOT`.
 
-A recipient directory must already exist. The identity or harness layer owns that provisioning step:
+agent-mail creates the recipient directory and Maildir on first delivery. If `agent-id` is installed and can resolve the identifier, the slug is used; otherwise the supplied session ID is used directly.
 
 ```text
 $AGENT_MAIL_ROOT/<recipient>/
@@ -60,27 +60,23 @@ The root is local and ephemeral. Do not use it for information that must survive
 
 ```bash
 # Send an inline message; body can also come from --body-file or stdin.
-agent-mail send --to worker-019fcdb2 --from coordinator \
+agent-mail send --to smoke-session --from coordinator \
   --subject "Need evidence" \
   --body "Please inspect the parser boundary."
 
 # Read the oldest unread message.
-agent-mail read --to worker-019fcdb2
+agent-mail read --to smoke-session
 
 # Inspect a specific message without changing state.
-agent-mail read --to worker-019fcdb2 --id MSGID --peek
+agent-mail read --to smoke-session --id MSGID --peek
 
 # Check whether a sent message remains unread or has been read.
 agent-mail receipt MSGID
 ```
 
-Recipients resolve as follows:
+Recipients may be supplied as a session ID, canonical agent name, or agent slug. If `agent-id` is available and resolves the identifier, its slug selects the mailbox directory; otherwise the identifier itself is used under `AGENT_MAIL_ROOT`.
 
-- An exact directory under `AGENT_MAIL_ROOT`, such as `worker-019fcdb2`.
-- A bare name such as `worker` when exactly one `worker-*` directory exists.
-- `humans/<handle>` or an email-like address for human inboxes.
-
-Ambiguous recipient prefixes fail rather than guessing. The recipient directory must be provisioned before first delivery; `agent-mail` does not invent identities or create dead inboxes.
+Human recipients are intentionally deferred; see the future `sq` task for that feature.
 
 ## Development
 

@@ -16,7 +16,7 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Deliver a message to an agent or human inbox
+    /// Deliver a message to an agent inbox
     Send(SendArgs),
     /// Read the oldest unread message or a specific message
     Read(ReadArgs),
@@ -28,7 +28,7 @@ pub enum Commands {
 
 #[derive(Debug, Args)]
 pub struct SendArgs {
-    /// Recipient ID. The identity layer provisions the matching directory.
+    /// Recipient session ID, canonical name, or agent slug
     #[arg(long, value_name = "ID")]
     pub to: String,
 

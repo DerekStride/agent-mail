@@ -4,13 +4,13 @@ use crate::cli::PrimeArgs;
 
 const PRELUDE: &str = r#"# agent-mail — local Maildir messaging for coding agents
 
-Use `agent-mail` to leave a message for another local agent session or a human. It is a filesystem-backed dead drop: no daemon, network transport, database, or identity allocator is required.
+Use `agent-mail` to leave a message for another local agent session. It is a filesystem-backed dead drop: no daemon, network transport, database, or identity allocator is required.
 
-The identity layer is deliberately outside this tool. It provisions recipient directories and supplies IDs; agent-mail only resolves those directories, writes messages, and reports read state.
+The identity layer is deliberately outside this tool. If `agent-id` is available, agent-mail uses its canonical slug for a human-readable mailbox directory; without it, session IDs work directly. agent-mail owns mailbox directory creation.
 
 ## Storage model
 
-The default root is `/tmp/agent`; override it with `AGENT_MAIL_ROOT`.
+The default root is `/tmp/agent-mail`; override it with `AGENT_MAIL_ROOT`.
 
 Each provisioned recipient has an inbox:
 
@@ -29,11 +29,11 @@ A message is written completely in `tmp/` and atomically renamed into `new/`. Re
 2. Save the message ID printed by `send` when delivery confirmation matters.
 3. Read the oldest unread message, or use `--id` for a specific message.
 4. Use `receipt` instead of sending a bare acknowledgement.
-5. Keep durable work in the repository, issues, or commits. `/tmp/agent` is local and ephemeral.
+5. Keep durable work in the repository, issues, or commits. `/tmp/agent-mail` is local and ephemeral.
 
 ## Addressing
 
-An exact recipient directory is preferred. A bare agent name may resolve to one `<name>-*` directory; multiple matches fail rather than guess. Human inboxes use `humans/<handle>` or an email-like address. The identity layer must create the recipient directory before first delivery.
+Recipients may be supplied as a session ID, canonical agent name, or agent slug. If `agent-id` is installed and knows the identifier, its slug selects the mailbox directory; otherwise the identifier itself is used as the directory name. The tool creates the recipient directory and Maildir on first delivery.
 
 ## Message state
 

@@ -1,4 +1,5 @@
-use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::{env, fs};
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -13,7 +14,6 @@ fn command(root: &TempDir) -> Command {
 #[test]
 fn send_read_and_receipt_track_maildir_state() {
     let root = tempfile::tempdir().unwrap();
-    fs::create_dir(root.path().join("receiver-e5f6g7h8")).unwrap();
 
     let output = command(&root)
         .args([
@@ -36,7 +36,7 @@ fn send_read_and_receipt_track_maildir_state() {
 
     let unread_path = root
         .path()
-        .join("receiver-e5f6g7h8/inbox/new")
+        .join("receiver/inbox/new")
         .join(format!("{message_id}.md"));
     assert!(unread_path.is_file());
 
@@ -56,7 +56,7 @@ fn send_read_and_receipt_track_maildir_state() {
     assert!(!unread_path.exists());
     assert!(root
         .path()
-        .join("receiver-e5f6g7h8/inbox/cur")
+        .join("receiver/inbox/cur")
         .join(format!("{message_id}.md"))
         .is_file());
 
@@ -70,7 +70,6 @@ fn send_read_and_receipt_track_maildir_state() {
 #[test]
 fn peek_leaves_message_unread() {
     let root = tempfile::tempdir().unwrap();
-    fs::create_dir(root.path().join("receiver-e5f6g7h8")).unwrap();
 
     let message_id = String::from_utf8(
         command(&root)
@@ -108,4 +107,33 @@ fn prime_teaches_the_supported_workflow() {
         .stdout(predicate::str::contains("agent-mail send"))
         .stdout(predicate::str::contains("agent-mail read"))
         .stdout(predicate::str::contains("agent-mail receipt"));
+}
+
+#[test]
+fn agent_id_slug_selects_mailbox_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let tools = tempfile::tempdir().unwrap();
+    let agent_id = tools.path().join("agent-id");
+    fs::write(
+        &agent_id,
+        "#!/bin/sh\nprintf '%s\\n' '{\"slug\":\"gienah-oak-darkwood\"}'\n",
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&agent_id).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&agent_id, permissions).unwrap();
+    let path = format!(
+        "{}:{}",
+        tools.path().display(),
+        env::var("PATH").unwrap_or_default()
+    );
+
+    command(&root)
+        .env("PATH", path)
+        .args(["send", "--to", "smoke-session", "--body", "hello"])
+        .assert()
+        .success();
+
+    assert!(root.path().join("gienah-oak-darkwood/inbox/new").is_dir());
+    assert!(!root.path().join("smoke-session").exists());
 }
