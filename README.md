@@ -67,6 +67,10 @@ agent-mail send --to smoke-session --from coordinator \
 # Read the oldest unread message.
 agent-mail read --to smoke-session
 
+# List unread headers without marking messages read.
+agent-mail scan --to smoke-session
+agent-mail scan --all
+
 # Inspect a specific message without changing state.
 agent-mail read --to smoke-session --id MSGID --peek
 

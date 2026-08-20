@@ -17,6 +17,7 @@ fn run() -> Result<()> {
 
     match cli.command {
         cli::Commands::Send(args) => mail::send(&args),
+        cli::Commands::Scan(args) => mail::scan(&args),
         cli::Commands::Read(args) => mail::read(&args),
         cli::Commands::Receipt(args) => mail::receipt(&args),
         cli::Commands::Prime(args) => prime::execute(&args),

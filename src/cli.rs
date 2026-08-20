@@ -18,6 +18,8 @@ pub struct Cli {
 pub enum Commands {
     /// Deliver a message to an agent inbox
     Send(SendArgs),
+    /// List unread messages for one recipient or all inboxes
+    Scan(ScanArgs),
     /// Read the oldest unread message or a specific message
     Read(ReadArgs),
     /// Report whether a sent message is unread, read, or absent
@@ -55,6 +57,17 @@ pub struct SendArgs {
     /// Read the message body from a file
     #[arg(long, value_name = "PATH", conflicts_with = "body")]
     pub body_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct ScanArgs {
+    /// Recipient ID whose unread messages should be listed
+    #[arg(long, value_name = "ID", conflicts_with = "all")]
+    pub to: Option<String>,
+
+    /// List unread messages in every agent inbox
+    #[arg(long, conflicts_with = "to")]
+    pub all: bool,
 }
 
 #[derive(Debug, Args)]

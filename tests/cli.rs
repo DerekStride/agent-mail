@@ -137,3 +137,61 @@ fn agent_id_slug_selects_mailbox_directory() {
     assert!(root.path().join("gienah-oak-darkwood/inbox/new").is_dir());
     assert!(!root.path().join("smoke-session").exists());
 }
+
+#[test]
+fn scan_lists_unread_headers_for_one_recipient() {
+    let root = tempfile::tempdir().unwrap();
+
+    command(&root)
+        .args([
+            "send",
+            "--to",
+            "receiver",
+            "--from",
+            "sender",
+            "--subject",
+            "handoff",
+            "--body",
+            "Unread body",
+        ])
+        .assert()
+        .success();
+
+    command(&root)
+        .args(["scan", "--to", "receiver"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("receiver/inbox"))
+        .stdout(predicate::str::contains("from:sender"))
+        .stdout(predicate::str::contains("handoff"))
+        .stdout(predicate::str::contains("Unread body").not());
+}
+
+#[test]
+fn scan_all_lists_each_agent_inbox() {
+    let root = tempfile::tempdir().unwrap();
+
+    for recipient in ["alpha", "beta"] {
+        command(&root)
+            .args([
+                "send",
+                "--to",
+                recipient,
+                "--subject",
+                recipient,
+                "--body",
+                "body",
+            ])
+            .assert()
+            .success();
+    }
+
+    command(&root)
+        .args(["scan", "--all"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alpha/inbox"))
+        .stdout(predicate::str::contains("beta/inbox"))
+        .stdout(predicate::str::contains("alpha"))
+        .stdout(predicate::str::contains("beta"));
+}

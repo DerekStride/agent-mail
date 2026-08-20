@@ -51,15 +51,19 @@ This is a same-machine, same-filesystem transport. It has no authentication, enc
 
 ```bash
 # Inline body
-agent-mail send --to worker-019fcdb2 --from coordinator --subject "Need evidence" \
+agent-mail send --to smoke-session --from coordinator --subject "Need evidence" \
   --body "Please inspect the parser boundary and report the failing case."
 
 # File or stdin body
-agent-mail send --to worker-019fcdb2 --subject "Handoff" --body-file findings.md
+agent-mail send --to smoke-session --subject "Handoff" --body-file findings.md
 printf '%s\n' "The fix is ready for review." | agent-mail send --to coordinator
 
+# List unread headers without reading message bodies
+agent-mail scan --to smoke-session
+agent-mail scan --all
+
 # Read and reply
-agent-mail read --to worker-019fcdb2
+agent-mail read --to smoke-session
 agent-mail send --to coordinator --in-reply-to MSGID --subject "re: Handoff" \
   --body "The requested inspection is complete."
 

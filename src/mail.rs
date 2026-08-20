@@ -13,7 +13,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use std::fmt::Write as FormatWrite;
 
-use crate::cli::{ReadArgs, ReceiptArgs, SendArgs};
+use crate::cli::{ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
 
 pub const MAIL_ROOT_ENV: &str = "AGENT_MAIL_ROOT";
 const DEFAULT_MAIL_ROOT: &str = "/tmp/agent-mail";
@@ -85,6 +85,50 @@ pub fn send(args: &SendArgs) -> Result<()> {
         )
     })?;
     println!("{msgid}");
+    Ok(())
+}
+pub fn scan(args: &ScanArgs) -> Result<()> {
+    match (args.to.as_deref(), args.all) {
+        (Some(_), true) | (None, false) => {
+            bail!("scan requires exactly one of --to ID or --all")
+        }
+        _ => {}
+    }
+
+    let root = mail_root();
+    let mut inboxes = if args.all {
+        discover_inboxes(&root)?
+    } else {
+        vec![resolve_inbox(
+            &root,
+            args.to.as_deref().expect("validated recipient"),
+        )?]
+    };
+    inboxes.sort();
+
+    let mut found = false;
+    for inbox in inboxes {
+        for message in unread_messages(&inbox)? {
+            found = true;
+            let message_id = message
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .context("unread message has no valid filename")?;
+            let from = message_header(&message, "From")?.unwrap_or_else(|| "unknown".to_string());
+            let subject = message_header(&message, "Subject")?.unwrap_or_default();
+            println!(
+                "{}\t{}\tfrom:{}\t{}",
+                inbox.display(),
+                message_id,
+                from,
+                subject
+            );
+        }
+    }
+
+    if !found {
+        println!("(no unread messages)");
+    }
     Ok(())
 }
 
@@ -288,6 +332,26 @@ fn find_message(inbox: &Path, requested_id: Option<&str>) -> Result<Option<PathB
 fn existing_message(inbox: &Path, state: &str, message_id: &str) -> Option<PathBuf> {
     let path = inbox.join(state).join(format!("{message_id}.md"));
     path.is_file().then_some(path)
+}
+
+fn unread_messages(inbox: &Path) -> Result<Vec<PathBuf>> {
+    let mut messages = read_dir_or_empty(&inbox.join("new"))?
+        .into_iter()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "md"))
+        .collect::<Vec<_>>();
+    messages.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    Ok(messages)
+}
+
+fn message_header(path: &Path, header: &str) -> Result<Option<String>> {
+    let contents = fs::read_to_string(path)
+        .with_context(|| format!("reading message headers from {}", path.display()))?;
+    let prefix = format!("{header}: ");
+    Ok(contents
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .find_map(|line| line.strip_prefix(&prefix).map(ToOwned::to_owned)))
 }
 
 fn discover_inboxes(root: &Path) -> Result<Vec<PathBuf>> {
