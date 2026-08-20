@@ -82,6 +82,18 @@ Recipients may be supplied as a session ID, canonical agent name, or agent slug.
 
 Human recipients are intentionally deferred; see the future `sq` task for that feature.
 
+## OMP integration
+
+The optional OMP extension injects the current agent identity only into Bash calls that invoke `agent-mail`. It does not modify the parent shell or unrelated Bash commands.
+
+Link it into the active OMP extension directory:
+
+```bash
+ln -sf "$PWD/extensions/agent-mail.ts" "$HOME/.omp/agent/extensions/agent-mail.ts"
+```
+
+Reload OMP after changing the extension. If `agent-id` is unavailable, agent-mail continues to use session IDs directly.
+
 ## Development
 
 ```bash

@@ -35,6 +35,10 @@ A message is written completely in `tmp/` and atomically renamed into `new/`. Re
 
 Recipients may be supplied as a session ID, canonical agent name, or agent slug. If `agent-id` is installed and knows the identifier, its slug selects the mailbox directory; otherwise the identifier itself is used as the directory name. The tool creates the recipient directory and Maildir on first delivery.
 
+## OMP integration
+
+The optional `extensions/agent-mail.ts` extension resolves the current agent identity and injects `AGENT_ID_*` variables only into Bash calls that invoke `agent-mail`. It does not modify the parent shell or unrelated Bash commands. Reload OMP after installing or changing the extension.
+
 ## Message state
 
 - `new/`: delivered, unread
