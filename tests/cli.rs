@@ -47,7 +47,7 @@ fn send_read_and_receipt_track_maildir_state() {
         .stdout(predicate::str::starts_with("unread\t"));
 
     command(&root)
-        .args(["read", "--to", "receiver"])
+        .args(["read", &message_id])
         .assert()
         .success()
         .stdout(predicate::str::contains("Subject: handoff"))
@@ -85,7 +85,7 @@ fn peek_leaves_message_unread() {
     .to_string();
 
     command(&root)
-        .args(["read", "--to", "receiver", "--peek"])
+        .args(["read", &message_id, "--peek"])
         .assert()
         .success()
         .stdout(predicate::str::contains("peek me"));
@@ -233,7 +233,7 @@ fn discard_moves_unread_message_to_trash() {
         .join(format!("{message_id}.md"));
 
     command(&root)
-        .args(["discard", "--to", "receiver", "--id", &message_id])
+        .args(["discard", &message_id])
         .assert()
         .success();
 
@@ -268,11 +268,11 @@ fn discard_preserves_read_maildir_state() {
     .to_string();
 
     command(&root)
-        .args(["read", "--to", "receiver"])
+        .args(["read", &message_id])
         .assert()
         .success();
     command(&root)
-        .args(["discard", "--to", "receiver", "--id", &message_id])
+        .args(["discard", &message_id])
         .assert()
         .success();
 

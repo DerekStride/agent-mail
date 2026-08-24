@@ -70,18 +70,18 @@ agent-mail send --to smoke-session --from coordinator \
   --subject "Need evidence" \
   --body "Please inspect the parser boundary."
 
-# Read the oldest unread message.
-agent-mail read --to smoke-session
+# Read a message by ID.
+agent-mail read MSGID
 
 # List unread headers without marking messages read.
 agent-mail scan --to smoke-session
 agent-mail scan --all
 
 # Soft-delete a message while preserving its original read state.
-agent-mail discard --to smoke-session --id MSGID
+agent-mail discard MSGID
 
 # Inspect a specific message without changing state.
-agent-mail read --to smoke-session --id MSGID --peek
+agent-mail read MSGID --peek
 
 # Check whether a sent message remains unread or has been read.
 agent-mail receipt MSGID

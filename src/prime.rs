@@ -31,7 +31,7 @@ A message is written completely in `tmp/` and atomically renamed into `new/`. Re
 
 1. Send a useful request or result. Use a subject and put longer bodies in a file or stdin.
 2. Save the message ID printed by `send` when delivery confirmation matters.
-3. Read the oldest unread message, or use `--id` for a specific message.
+3. Use `scan` to find a message ID, then read it directly with `read <MSGID>`.
 4. Use `receipt` instead of sending a bare acknowledgement.
 5. Keep durable work in the repository, issues, or commits. `/tmp/agent-mail` is local and ephemeral.
 
@@ -70,10 +70,10 @@ agent-mail scan --to smoke-session
 agent-mail scan --all
 
 # Soft-delete a message while preserving its original read state
-agent-mail discard --to smoke-session --id MSGID
+agent-mail discard MSGID
 
 # Read and reply
-agent-mail read --to smoke-session
+agent-mail read MSGID
 agent-mail send --to coordinator --in-reply-to MSGID --subject "re: Handoff" \
   --body "The requested inspection is complete."
 
@@ -127,6 +127,7 @@ mod tests {
         assert!(manual.contains("## Storage model"));
         assert!(manual.contains("### `agent-mail send`"));
         assert!(manual.contains("### `agent-mail read`"));
+        assert!(manual.contains("### `agent-mail discard`"));
         assert!(manual.contains("### `agent-mail receipt`"));
         assert!(manual.contains("identity layer"));
     }

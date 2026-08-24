@@ -142,9 +142,9 @@ pub fn scan(args: &ScanArgs) -> Result<()> {
 }
 
 pub fn read(args: &ReadArgs) -> Result<()> {
-    let inbox = resolve_mailbox(&mail_root(), &args.to)?.path;
-    let message = find_message(&inbox, args.id.as_deref())?
-        .with_context(|| format!("no message for '{}'", args.to))?;
+    let message_id = normalize_message_id(&args.message_id)?;
+    let (inbox, message) = find_message_by_id(&mail_root(), &message_id)?
+        .with_context(|| format!("no message with ID '{message_id}'"))?;
 
     let contents = fs::read_to_string(&message)
         .with_context(|| format!("reading message {}", message.display()))?;
@@ -175,14 +175,15 @@ pub fn read(args: &ReadArgs) -> Result<()> {
 }
 
 pub fn discard(args: &DiscardArgs) -> Result<()> {
-    let inbox = resolve_mailbox(&mail_root(), &args.to)?.path;
-    let message_id = normalize_message_id(&args.id)?;
-    let Some((state, source)) = ["new", "cur"]
-        .into_iter()
-        .find_map(|state| existing_message(&inbox, state, &message_id).map(|path| (state, path)))
-    else {
+    let message_id = normalize_message_id(&args.message_id)?;
+    let Some((inbox, source)) = find_message_by_id(&mail_root(), &message_id)? else {
         return Ok(());
     };
+    let state = source
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .context("message path has no state")?;
 
     let trash = inbox.join(TRASH_DIR);
     for directory in ["tmp", "new", "cur"] {
@@ -365,21 +366,15 @@ fn normalize_message_id(value: &str) -> Result<String> {
     Ok(message_id.to_string())
 }
 
-fn find_message(inbox: &Path, requested_id: Option<&str>) -> Result<Option<PathBuf>> {
-    if let Some(requested_id) = requested_id {
-        let id = normalize_message_id(requested_id)?;
-        return Ok(
-            existing_message(inbox, "new", &id).or_else(|| existing_message(inbox, "cur", &id))
-        );
+fn find_message_by_id(root: &Path, message_id: &str) -> Result<Option<(PathBuf, PathBuf)>> {
+    for inbox in discover_inboxes(root)? {
+        for state in ["new", "cur"] {
+            if let Some(path) = existing_message(&inbox, state, message_id) {
+                return Ok(Some((inbox, path)));
+            }
+        }
     }
-
-    let mut messages = read_dir_or_empty(&inbox.join("new"))?
-        .into_iter()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "md"))
-        .collect::<Vec<_>>();
-    messages.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
-    Ok(messages.into_iter().next())
+    Ok(None)
 }
 
 fn existing_message(inbox: &Path, state: &str, message_id: &str) -> Option<PathBuf> {

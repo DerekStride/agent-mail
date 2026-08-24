@@ -20,7 +20,7 @@ pub enum Commands {
     Send(SendArgs),
     /// List unread messages for one recipient or all inboxes
     Scan(ScanArgs),
-    /// Read the oldest unread message or a specific message
+    /// Read a message by ID
     Read(ReadArgs),
     /// Soft-delete a message into the Maildir++ .Trash folder
     Discard(DiscardArgs),
@@ -74,24 +74,16 @@ pub struct ScanArgs {
 
 #[derive(Debug, Args)]
 pub struct DiscardArgs {
-    /// Recipient ID whose message should be discarded
-    #[arg(long, value_name = "ID")]
-    pub to: String,
-
     /// Message ID to move to .Trash
-    #[arg(long, value_name = "MSGID")]
-    pub id: String,
+    #[arg(value_name = "MSGID")]
+    pub message_id: String,
 }
 
 #[derive(Debug, Args)]
 pub struct ReadArgs {
-    /// Recipient ID whose inbox should be read
-    #[arg(long, value_name = "ID")]
-    pub to: String,
-
-    /// Read this message ID instead of the oldest unread message
-    #[arg(long, value_name = "MSGID")]
-    pub id: Option<String>,
+    /// Message ID to read
+    #[arg(value_name = "MSGID")]
+    pub message_id: String,
 
     /// Print without moving an unread message to cur/
     #[arg(long)]

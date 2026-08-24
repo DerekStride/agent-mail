@@ -33,11 +33,10 @@ class AgentMail < Formula
 
   test do
     root = testpath/"mail"
-    (root/"receiver-session").mkpath
     ENV["AGENT_MAIL_ROOT"] = root.to_s
     output = shell_output("#{bin}/agent-mail send --to receiver --from sender --body hello")
     assert_match /T/, output
-    assert_match "Subject: (no subject)", shell_output("#{bin}/agent-mail read --to receiver")
+    assert_match "Subject: (no subject)", shell_output("#{bin}/agent-mail read #{output.strip}")
   end
 end
 EOF
