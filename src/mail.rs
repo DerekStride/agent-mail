@@ -4,11 +4,10 @@ use std::{
     io::{self, Read as IoRead, Write},
     path::{Path, PathBuf},
     process::Command,
-    time::SystemTime,
 };
 
 use anyhow::{bail, Context, Result};
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::fmt::Write as FormatWrite;
 use ulid::Ulid;
@@ -205,14 +204,14 @@ pub fn receipt(args: &ReceiptArgs) -> Result<()> {
     let root = mail_root();
 
     for inbox in discover_inboxes(&root)? {
-        let (state, path) = if let Some(path) = existing_message(&inbox, "cur", &message_id) {
-            ("read", path)
-        } else if let Some(path) = existing_message(&inbox, "new", &message_id) {
-            ("unread", path)
-        } else if let Some(path) = existing_message(&inbox, ".Trash/cur", &message_id) {
-            ("discarded", path)
-        } else if let Some(path) = existing_message(&inbox, ".Trash/new", &message_id) {
-            ("discarded", path)
+        let state = if existing_message(&inbox, "cur", &message_id).is_some() {
+            "read"
+        } else if existing_message(&inbox, "new", &message_id).is_some() {
+            "unread"
+        } else if existing_message(&inbox, ".Trash/cur", &message_id).is_some() {
+            "discarded"
+        } else if existing_message(&inbox, ".Trash/new", &message_id).is_some() {
+            "discarded"
         } else {
             continue;
         };
@@ -222,7 +221,7 @@ pub fn receipt(args: &ReceiptArgs) -> Result<()> {
             .and_then(Path::file_name)
             .and_then(|name| name.to_str())
             .unwrap_or("unknown");
-        let age = message_age_hours(&path, &message_id);
+        let age = message_age_hours(&message_id);
         let delivered = delivered_timestamp(&message_id);
         println!("{state}\t{message_id}\tto:{recipient}\tdelivered:{delivered}\t{age}h ago");
         return Ok(());
@@ -355,6 +354,9 @@ fn normalize_message_id(value: &str) -> Result<String> {
     if message_id.is_empty() || message_id.contains('/') || message_id.contains('\0') {
         bail!("invalid message ID: {value:?}");
     }
+    if Ulid::from_string(message_id).is_err() {
+        bail!("message ID must be a valid ULID: {value:?}");
+    }
     Ok(message_id.to_string())
 }
 
@@ -421,45 +423,26 @@ fn read_dir_or_empty(path: &Path) -> Result<Vec<fs::DirEntry>> {
 }
 
 fn message_timestamp(message_id: &str) -> Option<DateTime<Utc>> {
-    if let Ok(ulid) = Ulid::from_string(message_id) {
-        return DateTime::<Utc>::from_timestamp_millis(ulid.timestamp_ms() as i64);
-    }
-
-    message_id.split('-').next().and_then(|value| {
-        NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%SZ")
-            .ok()
-            .map(|date| Utc.from_utc_datetime(&date))
-    })
+    let ulid = Ulid::from_string(message_id).ok()?;
+    DateTime::<Utc>::from_timestamp_millis(ulid.timestamp_ms() as i64)
 }
 
 fn delivered_timestamp(message_id: &str) -> String {
     message_timestamp(message_id)
         .map(|timestamp| timestamp.format("%Y%m%dT%H%M%SZ").to_string())
-        .unwrap_or_else(|| {
-            message_id
-                .split('-')
-                .next()
-                .unwrap_or(message_id)
-                .to_string()
-        })
+        .unwrap_or_else(|| message_id.to_string())
 }
 
-fn message_age_hours(path: &Path, message_id: &str) -> i64 {
-    if let Some(timestamp) = message_timestamp(message_id) {
-        return (Utc::now() - timestamp).num_hours().max(0);
-    }
-
-    fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
-        .and_then(|modified| SystemTime::now().duration_since(modified).ok())
-        .map(|age| (age.as_secs() / 3600) as i64)
+fn message_age_hours(message_id: &str) -> i64 {
+    message_timestamp(message_id)
+        .map(|timestamp| (Utc::now() - timestamp).num_hours().max(0))
         .unwrap_or(0)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn message_format_preserves_mail_headers_and_body() {
@@ -491,8 +474,9 @@ mod tests {
     }
 
     #[test]
-    fn legacy_message_timestamps_remain_readable() {
-        assert!(message_timestamp("20260820T145311Z-93848-834298000-0").is_some());
+    fn non_ulid_message_ids_are_rejected() {
+        let error = normalize_message_id("20260820T145311Z-93848-834298000-0").unwrap_err();
+        assert!(error.to_string().contains("valid ULID"));
     }
 
     #[test]
