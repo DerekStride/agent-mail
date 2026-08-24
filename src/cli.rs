@@ -22,6 +22,8 @@ pub enum Commands {
     Scan(ScanArgs),
     /// Read the oldest unread message or a specific message
     Read(ReadArgs),
+    /// Soft-delete a message into the Maildir++ .Trash folder
+    Discard(DiscardArgs),
     /// Report whether a sent message is unread, read, or absent
     Receipt(ReceiptArgs),
     /// Output the agent-facing workflow manual
@@ -68,6 +70,17 @@ pub struct ScanArgs {
     /// List unread messages in every agent inbox
     #[arg(long, conflicts_with = "to")]
     pub all: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct DiscardArgs {
+    /// Recipient ID whose message should be discarded
+    #[arg(long, value_name = "ID")]
+    pub to: String,
+
+    /// Message ID to move to .Trash
+    #[arg(long, value_name = "MSGID")]
+    pub id: String,
 }
 
 #[derive(Debug, Args)]

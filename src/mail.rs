@@ -13,11 +13,12 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use std::fmt::Write as FormatWrite;
 
-use crate::cli::{ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
+use crate::cli::{DiscardArgs, ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
 
 pub const MAIL_ROOT_ENV: &str = "AGENT_MAIL_ROOT";
 pub const MAIL_ID_ENV: &str = "AGENT_MAIL_ID";
 const DEFAULT_MAIL_ROOT: &str = "/tmp/agent-mail";
+const TRASH_DIR: &str = ".Trash";
 static MESSAGE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn send(args: &SendArgs) -> Result<()> {
@@ -173,6 +174,32 @@ pub fn read(args: &ReadArgs) -> Result<()> {
     Ok(())
 }
 
+pub fn discard(args: &DiscardArgs) -> Result<()> {
+    let inbox = resolve_mailbox(&mail_root(), &args.to)?.path;
+    let message_id = normalize_message_id(&args.id)?;
+    let Some((state, source)) = ["new", "cur"]
+        .into_iter()
+        .find_map(|state| existing_message(&inbox, state, &message_id).map(|path| (state, path)))
+    else {
+        return Ok(());
+    };
+
+    let trash = inbox.join(TRASH_DIR);
+    for directory in ["tmp", "new", "cur"] {
+        fs::create_dir_all(trash.join(directory))
+            .with_context(|| format!("creating {}", trash.join(directory).display()))?;
+    }
+    let filename = source.file_name().context("message path has no filename")?;
+    let destination = trash.join(state).join(filename);
+    fs::rename(&source, &destination).with_context(|| {
+        format!(
+            "soft-deleting message by moving {} to {}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+    Ok(())
+}
 pub fn receipt(args: &ReceiptArgs) -> Result<()> {
     let message_id = normalize_message_id(&args.message_id)?;
     let root = mail_root();
@@ -182,6 +209,10 @@ pub fn receipt(args: &ReceiptArgs) -> Result<()> {
             ("read", path)
         } else if let Some(path) = existing_message(&inbox, "new", &message_id) {
             ("unread", path)
+        } else if let Some(path) = existing_message(&inbox, ".Trash/cur", &message_id) {
+            ("discarded", path)
+        } else if let Some(path) = existing_message(&inbox, ".Trash/new", &message_id) {
+            ("discarded", path)
         } else {
             continue;
         };
@@ -197,7 +228,7 @@ pub fn receipt(args: &ReceiptArgs) -> Result<()> {
         return Ok(());
     }
 
-    bail!("unknown\t{message_id}\tnot in any inbox (read and discarded, or never delivered)")
+    bail!("unknown\t{message_id}\tnot in any inbox (never delivered or removed)")
 }
 
 fn mail_root() -> PathBuf {

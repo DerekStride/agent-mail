@@ -206,3 +206,84 @@ fn scan_all_lists_each_agent_inbox() {
         .stdout(predicate::str::contains("alpha"))
         .stdout(predicate::str::contains("beta"));
 }
+
+#[test]
+fn discard_moves_unread_message_to_trash() {
+    let root = tempfile::tempdir().unwrap();
+    let message_id = String::from_utf8(
+        command(&root)
+            .args(["send", "--to", "receiver", "--body", "discard me"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+
+    let source = root
+        .path()
+        .join("receiver/inbox/new")
+        .join(format!("{message_id}.md"));
+    let destination = root
+        .path()
+        .join("receiver/inbox/.Trash/new")
+        .join(format!("{message_id}.md"));
+
+    command(&root)
+        .args(["discard", "--to", "receiver", "--id", &message_id])
+        .assert()
+        .success();
+
+    assert!(!source.exists());
+    assert!(destination.is_file());
+    command(&root)
+        .args(["receipt", &message_id])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("discarded\t"));
+    command(&root)
+        .args(["scan", "--to", "receiver"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(no unread messages)"));
+}
+
+#[test]
+fn discard_preserves_read_maildir_state() {
+    let root = tempfile::tempdir().unwrap();
+    let message_id = String::from_utf8(
+        command(&root)
+            .args(["send", "--to", "receiver", "--body", "read then discard"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+
+    command(&root)
+        .args(["read", "--to", "receiver"])
+        .assert()
+        .success();
+    command(&root)
+        .args(["discard", "--to", "receiver", "--id", &message_id])
+        .assert()
+        .success();
+
+    assert!(root
+        .path()
+        .join("receiver/inbox/.Trash/cur")
+        .join(format!("{message_id}.md"))
+        .is_file());
+    assert!(!root
+        .path()
+        .join("receiver/inbox/.Trash/new")
+        .join(format!("{message_id}.md"))
+        .exists());
+}

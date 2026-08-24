@@ -12,13 +12,17 @@ The identity layer is deliberately outside this tool. If `agent-id` is available
 
 The default root is `/tmp/agent-mail`; override it with `AGENT_MAIL_ROOT`.
 
-Each provisioned recipient has an inbox:
+Each recipient has an inbox:
 
 ```text
 $AGENT_MAIL_ROOT/<recipient>/inbox/
 ├── tmp/  message is being written
 ├── new/  delivered and unread
-└── cur/  read and retained
+├── cur/  read and retained
+└── .Trash/
+    ├── tmp/
+    ├── new/  soft-deleted unread message
+    └── cur/  soft-deleted read message
 ```
 
 A message is written completely in `tmp/` and atomically renamed into `new/`. Reading moves it from `new/` to `cur/`. The directory is the state; no mutable read flag is needed.
@@ -41,11 +45,10 @@ The optional `extensions/agent-mail.ts` extension injects only `AGENT_MAIL_ID` i
 
 ## Message state
 
-- `new/`: delivered, unread
-- `cur/`: read, retained for inspection or audit
-- absent: discarded, pruned, or never delivered
+- `.Trash/new/` or `.Trash/cur/`: soft-deleted and retained
+- absent: never delivered or removed
 
-Messages use RFC-822-shaped headers followed by a plain-text body. `receipt` infers state from the file location. It cannot distinguish a discarded message from one that was never delivered.
+Messages use RFC-822-shaped headers followed by a plain-text body. `receipt` infers state from the file location and reports `discarded` for messages in `.Trash`. It cannot distinguish a message that was never delivered from one removed outside the Maildir.
 
 ## Boundaries
 
@@ -65,6 +68,9 @@ printf '%s\n' "The fix is ready for review." | agent-mail send --to coordinator
 # List unread headers without reading message bodies
 agent-mail scan --to smoke-session
 agent-mail scan --all
+
+# Soft-delete a message while preserving its original read state
+agent-mail discard --to smoke-session --id MSGID
 
 # Read and reply
 agent-mail read --to smoke-session

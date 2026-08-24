@@ -51,10 +51,14 @@ $AGENT_MAIL_ROOT/<recipient>/
 └── inbox/
     ├── tmp/  message is being written
     ├── new/  delivered and unread
-    └── cur/  read and retained
+    ├── cur/  read and retained
+    └── .Trash/
+        ├── tmp/
+        ├── new/  soft-deleted unread message
+        └── cur/  soft-deleted read message
 ```
 
-`send` writes a complete RFC-822-shaped message to `tmp/`, then atomically renames it into `new/`. `read` moves it into `cur/` unless `--peek` is used. `receipt` infers state from the directory containing the message.
+`send` writes a complete RFC-822-shaped message to `tmp/`, then atomically renames it into `new/`. `read` moves it into `cur/` unless `--peek` is used. `discard` moves it into `.Trash/new/` or `.Trash/cur/`, preserving its read state. `receipt` reports the resulting state.
 
 The root is local and ephemeral. Do not use it for information that must survive reboot, temporary-file cleanup, or machine loss.
 
@@ -72,6 +76,9 @@ agent-mail read --to smoke-session
 # List unread headers without marking messages read.
 agent-mail scan --to smoke-session
 agent-mail scan --all
+
+# Soft-delete a message while preserving its original read state.
+agent-mail discard --to smoke-session --id MSGID
 
 # Inspect a specific message without changing state.
 agent-mail read --to smoke-session --id MSGID --peek
