@@ -20,6 +20,8 @@ pub enum Commands {
     Send(SendArgs),
     /// List unread messages for one recipient or all inboxes
     Scan(ScanArgs),
+    /// Print the resolved inbox path for a recipient
+    Addr(AddrArgs),
     /// Read a message by ID
     Read(ReadArgs),
     /// Soft-delete a message into the Maildir++ .Trash folder
@@ -70,6 +72,13 @@ pub struct ScanArgs {
     /// List unread messages in every agent inbox
     #[arg(long, conflicts_with = "to")]
     pub all: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct AddrArgs {
+    /// Recipient session ID, canonical name, or agent slug
+    #[arg(value_name = "RECIPIENT")]
+    pub recipient: String,
 }
 
 #[derive(Debug, Args)]

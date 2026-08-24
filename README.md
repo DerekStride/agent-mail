@@ -79,6 +79,9 @@ agent-mail read MSGID
 agent-mail scan --to smoke-session
 agent-mail scan --all
 
+# Show the resolved inbox path without creating it.
+agent-mail addr smoke-session
+
 # Soft-delete a message while preserving its original read state.
 agent-mail discard MSGID
 

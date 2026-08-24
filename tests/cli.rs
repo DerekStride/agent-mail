@@ -150,6 +150,41 @@ fn agent_id_slug_selects_mailbox_directory() {
 }
 
 #[test]
+fn addr_resolves_without_creating_mailbox() {
+    let root = tempfile::tempdir().unwrap();
+    let tools = tempfile::tempdir().unwrap();
+    let agent_id = tools.path().join("agent-id");
+    fs::write(
+        &agent_id,
+        "#!/bin/sh\nprintf '%s\\n' '{\"version\":1,\"session_id\":\"smoke-session\",\"name\":\"Gienah Oak of Darkwood\",\"slug\":\"gienah-oak-darkwood\",\"first_name\":\"Gienah\",\"family_name\":\"Oak\",\"realm\":\"Darkwood\"}'\n",
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&agent_id).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&agent_id, permissions).unwrap();
+    let path = format!(
+        "{}:{}",
+        tools.path().display(),
+        env::var("PATH").unwrap_or_default()
+    );
+
+    let output = command(&root)
+        .env("PATH", path)
+        .args(["addr", "smoke-session"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    assert_eq!(
+        String::from_utf8(output).unwrap(),
+        format!("{}/gienah-oak-darkwood/inbox\n", root.path().display())
+    );
+    assert!(!root.path().join("gienah-oak-darkwood").exists());
+}
+
+#[test]
 fn scan_lists_unread_headers_for_one_recipient() {
     let root = tempfile::tempdir().unwrap();
 

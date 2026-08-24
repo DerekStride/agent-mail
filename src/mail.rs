@@ -12,8 +12,7 @@ use serde::Deserialize;
 use std::fmt::Write as FormatWrite;
 use ulid::Ulid;
 
-use crate::cli::{DiscardArgs, ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
-
+use crate::cli::{AddrArgs, DiscardArgs, ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
 pub const MAIL_ROOT_ENV: &str = "AGENT_MAIL_ROOT";
 pub const MAIL_ID_ENV: &str = "AGENT_MAIL_ID";
 const DEFAULT_MAIL_ROOT: &str = "/tmp/agent-mail";
@@ -95,6 +94,12 @@ pub fn send(args: &SendArgs) -> Result<()> {
         )
     })?;
     println!("{msgid}");
+    Ok(())
+}
+
+pub fn addr(args: &AddrArgs) -> Result<()> {
+    let mailbox = resolve_mailbox(&mail_root(), &args.recipient)?;
+    println!("{}", mailbox.path.display());
     Ok(())
 }
 pub fn scan(args: &ScanArgs) -> Result<()> {
