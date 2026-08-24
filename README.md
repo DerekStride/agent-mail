@@ -98,7 +98,7 @@ Human recipients are intentionally deferred; see the future `sq` task for that f
 
 ## OMP integration
 
-The optional OMP extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. The command internally resolves that ID through `agent-id`; unrelated Bash commands and the parent shell are untouched.
+The optional OMP extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. It also checks the current inbox every minute; after five minutes without user or agent activity, unread messages queue one header-only follow-up turn. It does not modify the parent shell or unrelated Bash commands.
 
 Link it into the active OMP extension directory:
 

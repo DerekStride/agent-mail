@@ -43,7 +43,7 @@ Recipients may be supplied as a session ID, canonical agent name, or agent slug.
 
 ## OMP integration
 
-The optional `extensions/agent-mail.ts` extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. The command internally resolves that ID through `agent-id`; unrelated Bash commands and the parent shell are untouched. Reload OMP after installing or changing the extension.
+The optional `extensions/agent-mail.ts` extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. It checks the current inbox every minute; after five minutes without user or agent activity, unread messages queue one header-only follow-up turn. It does not modify the parent shell or unrelated Bash commands. Reload OMP after installing or changing the extension.
 
 ## Message state
 
