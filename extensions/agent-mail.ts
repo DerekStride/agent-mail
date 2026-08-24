@@ -190,6 +190,7 @@ export default function agentMailExtension(pi: ExtensionAPI): void {
     refreshSession(context, pi);
   });
   pi.on("session_fork", (_event, context) => ensureContextMessage(context, pi));
+  pi.on("session_shutdown", (_event, context) => stopSession(context));
   pi.on("input", () => {
     lastActivityAt = Date.now();
   });
