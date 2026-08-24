@@ -100,7 +100,7 @@ Human recipients are intentionally deferred; see the future `sq` task for that f
 
 The optional OMP extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. It also checks the current inbox every minute; after five minutes without user or agent activity, unread messages queue one header-only follow-up turn. It does not modify the parent shell or unrelated Bash commands.
 
-On session start, switch, or fork, it inserts one hidden persistent context message per branch: `Use AgentMail to communicate with other agents.` The extension checks the branch for its stable message type before inserting, so the instruction is not re-added on every turn and does not churn prompt-cache prefixes.
+On session start, switch, or fork, it inserts one hidden persistent context message per branch: `Use AgentMail to communicate with other agents. Run agent-mail prime to learn how to use it.` The extension checks the stable `agent-mail-context-v2` message type before inserting, so the instruction is not re-added on every turn and does not churn prompt-cache prefixes.
 
 Link it into the active OMP extension directory:
 

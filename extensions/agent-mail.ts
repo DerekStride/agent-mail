@@ -45,8 +45,9 @@ type UnreadMessage = {
 
 const AGENT_MAIL_COMMAND =
   /(?:^|[;&|]\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)(?:\S*\/)?agent-mail(?=\s|$)/;
-const CONTEXT_MESSAGE_TYPE = "agent-mail-context-v1";
-const CONTEXT_MESSAGE_CONTENT = "Use AgentMail to communicate with other agents.";
+const CONTEXT_MESSAGE_TYPE = "agent-mail-context-v2";
+const CONTEXT_MESSAGE_CONTENT =
+  "Use AgentMail to communicate with other agents. Run `agent-mail prime` to learn how to use it.";
 const CHECK_INTERVAL_MS = 60_000;
 const IDLE_THRESHOLD_MS = 5 * 60_000;
 let currentSessionId: string | undefined;

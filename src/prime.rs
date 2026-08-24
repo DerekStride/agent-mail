@@ -45,7 +45,7 @@ Recipients may be supplied as a session ID, canonical agent name, or agent slug.
 
 The optional `extensions/agent-mail.ts` extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. It checks the current inbox every minute; after five minutes without user or agent activity, unread messages queue one header-only follow-up turn. It does not modify the parent shell or unrelated Bash commands. Reload OMP after installing or changing the extension.
 
-On session start, switch, or fork, the extension adds one hidden persistent context message per branch: `Use AgentMail to communicate with other agents.` It checks the stable custom message type first, so resumed turns reuse the same prompt prefix instead of repeatedly spending cache tokens.
+On session start, switch, or fork, the extension adds one hidden persistent context message per branch: `Use AgentMail to communicate with other agents. Run agent-mail prime to learn how to use it.` It checks the stable `agent-mail-context-v2` message type first, so resumed turns reuse the same prompt prefix instead of repeatedly spending cache tokens.
 
 ## Message state
 
