@@ -27,6 +27,8 @@ $AGENT_MAIL_ROOT/<recipient>/inbox/
 
 A message is written completely in `tmp/` and atomically renamed into `new/`. Reading moves it from `new/` to `cur/`. The directory is the state; no mutable read flag is needed.
 
+Message IDs are 26-character uppercase ULIDs. They are filename-safe and lexicographically sortable; use the complete ID printed by `send`.
+
 ## Workflow
 
 1. Send a useful request or result. Use a subject and put longer bodies in a file or stdin.

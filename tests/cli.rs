@@ -1,9 +1,9 @@
-use std::os::unix::fs::PermissionsExt;
-use std::{env, fs};
-
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::os::unix::fs::PermissionsExt;
+use std::{env, fs};
 use tempfile::TempDir;
+use ulid::Ulid;
 
 fn command(root: &TempDir) -> Command {
     let mut command = Command::cargo_bin("agent-mail").unwrap();
@@ -33,7 +33,7 @@ fn send_read_and_receipt_track_maildir_state() {
         .stdout
         .clone();
     let message_id = String::from_utf8(output).unwrap().trim().to_string();
-
+    assert!(Ulid::from_string(&message_id).is_ok());
     let unread_path = root
         .path()
         .join("receiver/inbox/new")

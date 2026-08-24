@@ -35,7 +35,7 @@ class AgentMail < Formula
     root = testpath/"mail"
     ENV["AGENT_MAIL_ROOT"] = root.to_s
     output = shell_output("#{bin}/agent-mail send --to receiver --from sender --body hello")
-    assert_match /T/, output
+    assert_match(/\A[0-9A-HJKMNP-TV-Z]{26}\z/, output.strip)
     assert_match "Subject: (no subject)", shell_output("#{bin}/agent-mail read #{output.strip}")
   end
 end

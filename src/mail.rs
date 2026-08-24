@@ -4,7 +4,6 @@ use std::{
     io::{self, Read as IoRead, Write},
     path::{Path, PathBuf},
     process::Command,
-    sync::atomic::{AtomicU64, Ordering},
     time::SystemTime,
 };
 
@@ -12,6 +11,7 @@ use anyhow::{bail, Context, Result};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use std::fmt::Write as FormatWrite;
+use ulid::Ulid;
 
 use crate::cli::{DiscardArgs, ReadArgs, ReceiptArgs, ScanArgs, SendArgs};
 
@@ -19,7 +19,6 @@ pub const MAIL_ROOT_ENV: &str = "AGENT_MAIL_ROOT";
 pub const MAIL_ID_ENV: &str = "AGENT_MAIL_ID";
 const DEFAULT_MAIL_ROOT: &str = "/tmp/agent-mail";
 const TRASH_DIR: &str = ".Trash";
-static MESSAGE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn send(args: &SendArgs) -> Result<()> {
     let root = mail_root();
@@ -63,7 +62,7 @@ pub fn send(args: &SendArgs) -> Result<()> {
     };
 
     let now = Utc::now();
-    let msgid = generate_msgid(now);
+    let msgid = generate_msgid();
     let message = format_message(
         &sender,
         &to,
@@ -224,7 +223,7 @@ pub fn receipt(args: &ReceiptArgs) -> Result<()> {
             .and_then(|name| name.to_str())
             .unwrap_or("unknown");
         let age = message_age_hours(&path, &message_id);
-        let delivered = message_id.split('-').next().unwrap_or(&message_id);
+        let delivered = delivered_timestamp(&message_id);
         println!("{state}\t{message_id}\tto:{recipient}\tdelivered:{delivered}\t{age}h ago");
         return Ok(());
     }
@@ -343,15 +342,8 @@ fn format_message(
     message
 }
 
-fn generate_msgid(now: DateTime<Utc>) -> String {
-    let counter = MESSAGE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!(
-        "{}-{}-{}-{}",
-        now.format("%Y%m%dT%H%M%SZ"),
-        std::process::id(),
-        now.timestamp_subsec_nanos(),
-        counter
-    )
+fn generate_msgid() -> String {
+    Ulid::generate().to_string()
 }
 
 fn normalize_message_id(value: &str) -> Result<String> {
@@ -428,14 +420,32 @@ fn read_dir_or_empty(path: &Path) -> Result<Vec<fs::DirEntry>> {
     }
 }
 
-fn message_age_hours(path: &Path, message_id: &str) -> i64 {
-    let timestamp = message_id.split('-').next().and_then(|value| {
+fn message_timestamp(message_id: &str) -> Option<DateTime<Utc>> {
+    if let Ok(ulid) = Ulid::from_string(message_id) {
+        return DateTime::<Utc>::from_timestamp_millis(ulid.timestamp_ms() as i64);
+    }
+
+    message_id.split('-').next().and_then(|value| {
         NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%SZ")
             .ok()
             .map(|date| Utc.from_utc_datetime(&date))
-    });
+    })
+}
 
-    if let Some(timestamp) = timestamp {
+fn delivered_timestamp(message_id: &str) -> String {
+    message_timestamp(message_id)
+        .map(|timestamp| timestamp.format("%Y%m%dT%H%M%SZ").to_string())
+        .unwrap_or_else(|| {
+            message_id
+                .split('-')
+                .next()
+                .unwrap_or(message_id)
+                .to_string()
+        })
+}
+
+fn message_age_hours(path: &Path, message_id: &str) -> i64 {
+    if let Some(timestamp) = message_timestamp(message_id) {
         return (Utc::now() - timestamp).num_hours().max(0);
     }
 
@@ -459,7 +469,7 @@ mod tests {
             "receiver",
             Some("reply-target"),
             date,
-            "20260819T200000Z-1-2-0",
+            "01D39ZY06FGSCTVN4T2V9PKHFZ",
             Some("previous"),
             "handoff",
             "done",
@@ -467,8 +477,22 @@ mod tests {
 
         assert_eq!(
             message,
-            "From: sender\nTo: receiver\nReply-To: reply-target\nDate: 2026-08-19T20:00:00Z\nMessage-ID: 20260819T200000Z-1-2-0\nIn-Reply-To: previous\nSubject: handoff\n\ndone\n"
+            "From: sender\nTo: receiver\nReply-To: reply-target\nDate: 2026-08-19T20:00:00Z\nMessage-ID: 01D39ZY06FGSCTVN4T2V9PKHFZ\nIn-Reply-To: previous\nSubject: handoff\n\ndone\n"
         );
+    }
+
+    #[test]
+    fn generated_message_ids_are_ulids() {
+        let message_id = generate_msgid();
+
+        assert_eq!(message_id.len(), 26);
+        assert!(Ulid::from_string(&message_id).is_ok());
+        assert!(message_timestamp(&message_id).is_some());
+    }
+
+    #[test]
+    fn legacy_message_timestamps_remain_readable() {
+        assert!(message_timestamp("20260820T145311Z-93848-834298000-0").is_some());
     }
 
     #[test]

@@ -60,6 +60,8 @@ $AGENT_MAIL_ROOT/<recipient>/
 
 `send` writes a complete RFC-822-shaped message to `tmp/`, then atomically renames it into `new/`. `read` moves it into `cur/` unless `--peek` is used. `discard` moves it into `.Trash/new/` or `.Trash/cur/`, preserving its read state. `receipt` reports the resulting state.
 
+Message IDs are 26-character uppercase ULIDs: lexicographically sortable, filename-safe, and globally collision-resistant without embedding process IDs.
+
 The root is local and ephemeral. Do not use it for information that must survive reboot, temporary-file cleanup, or machine loss.
 
 ## Commands
