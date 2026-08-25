@@ -18,6 +18,16 @@ brew install derekstride/tap/agent-mail
 cargo install agent-mail
 ```
 
+### OMP plugin
+
+Install the binary first, then install the OMP extension from this repository:
+
+```bash
+omp plugin install https://github.com/DerekStride/agent-mail
+```
+
+The extension injects `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail` and maintains the agent's inbox notifications.
+
 ### Release binary
 
 Download the archive for your macOS architecture from [GitHub Releases](https://github.com/DerekStride/agent-mail/releases/latest), extract it, and place `agent-mail` on `PATH`.
@@ -102,7 +112,7 @@ The optional OMP extension injects only `AGENT_MAIL_ID` into Bash calls that inv
 
 On session start, switch, or fork, it inserts one hidden persistent context message per branch: `Use AgentMail to communicate with other agents. Run agent-mail prime to learn how to use it.` The extension checks the stable `agent-mail-context-v2` message type before inserting, so the instruction is not re-added on every turn and does not churn prompt-cache prefixes.
 
-Link it into the active OMP extension directory:
+For local development, link the extension into the active OMP extension directory:
 
 ```bash
 ln -sf "$PWD/extensions/agent-mail.ts" "$HOME/.omp/agent/extensions/agent-mail.ts"
