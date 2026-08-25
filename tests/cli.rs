@@ -98,12 +98,12 @@ fn peek_leaves_message_unread() {
 }
 
 #[test]
-fn prime_teaches_the_supported_workflow() {
+fn prime_teaches_the_agent_communication_workflow() {
     command(&tempfile::tempdir().unwrap())
         .args(["prime"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("## Storage model"))
+        .stdout(predicate::str::contains("agent-id prime"))
         .stdout(predicate::str::contains("agent-mail send"))
         .stdout(predicate::str::contains("agent-mail read"))
         .stdout(predicate::str::contains("agent-mail receipt"));

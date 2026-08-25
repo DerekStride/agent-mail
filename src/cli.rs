@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Args, Command, CommandFactory, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -28,7 +28,7 @@ pub enum Commands {
     Discard(DiscardArgs),
     /// Report whether a sent message is unread, read, or absent
     Receipt(ReceiptArgs),
-    /// Output the agent-facing workflow manual
+    /// Output the agent-facing communication workflow
     Prime(PrimeArgs),
 }
 
@@ -107,13 +107,5 @@ pub struct ReceiptArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(about = "Output the agent-facing workflow manual")]
-pub struct PrimeArgs {
-    /// Output the manual prelude without the generated command reference
-    #[arg(long)]
-    pub prelude: bool,
-}
-
-pub fn build_cli() -> Command {
-    Cli::command().after_help(crate::prime::root_after_help())
-}
+#[command(about = "Output the agent-facing communication workflow")]
+pub struct PrimeArgs {}

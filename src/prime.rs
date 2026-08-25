@@ -2,126 +2,106 @@ use anyhow::Result;
 
 use crate::cli::PrimeArgs;
 
-const PRELUDE: &str = r#"# agent-mail — local Maildir messaging for coding agents
+const MANUAL: &str = r#"# AgentMail workflow
 
-Use `agent-mail` to leave a message for another local agent session. It is a filesystem-backed dead drop: no daemon, network transport, database, or identity allocator is required.
+Use AgentMail to communicate with another local coding-agent session. It is asynchronous: send a complete request or result, then continue with work that does not depend on the reply.
 
-The identity layer is deliberately outside this tool. If `agent-id` is available, agent-mail uses its canonical slug for a human-readable mailbox directory; without it, session IDs work directly. agent-mail owns mailbox directory creation.
+## When to send mail
 
-## Storage model
+- Send a bounded request, handoff, decision, blocker, or result to a specific agent.
+- Include enough context for the recipient to act without reading your conversation.
+- Keep durable state in the repository, an issue, or a commit. AgentMail is not a durable record.
+- Do not send secrets. Mail is local plain text without authentication or encryption.
 
-The default root is `/tmp/agent-mail`; override it with `AGENT_MAIL_ROOT`.
+## Find a recipient
 
-Each recipient has an inbox:
+Recipients can be session IDs, canonical agent names, or agent slugs.
 
-```text
-$AGENT_MAIL_ROOT/<recipient>/inbox/
-├── tmp/  message is being written
-├── new/  delivered and unread
-├── cur/  read and retained
-└── .Trash/
-    ├── tmp/
-    ├── new/  soft-deleted unread message
-    └── cur/  soft-deleted read message
+If you need to understand Agent ID or discover other agents, run:
+
+```bash
+agent-id prime
 ```
 
-A message is written completely in `tmp/` and atomically renamed into `new/`. Reading moves it from `new/` to `cur/`. The directory is the state; no mutable read flag is needed.
+## Send
 
-Message IDs are 26-character uppercase ULIDs. They are filename-safe and lexicographically sortable; use the complete ID printed by `send`.
+Use a specific subject and an actionable body:
 
-## Workflow
+```bash
+agent-mail send --to RECIPIENT \
+  --subject "Inspect parser boundary" \
+  --body "Find the failing input, identify the owning function, and send the evidence."
+```
 
-1. Send a useful request or result. Use a subject and put longer bodies in a file or stdin.
-2. Save the message ID printed by `send` when delivery confirmation matters.
-3. Use `scan` to find a message ID, then read it directly with `read <MSGID>`.
-4. Use `receipt` instead of sending a bare acknowledgement.
-5. Keep durable work in the repository, issues, or commits. `/tmp/agent-mail` is local and ephemeral.
+For longer bodies, use a file or stdin:
 
-## Addressing
+```bash
+agent-mail send --to RECIPIENT --subject "Handoff" --body-file findings.txt
+printf '%s\n' "The fix is ready for review." | agent-mail send --to RECIPIENT
+```
 
-Recipients may be supplied as a session ID, canonical agent name, or agent slug. If `agent-id` is installed and knows the identifier, its slug selects the mailbox directory; otherwise the identifier itself is used as the directory name. The tool creates the recipient directory and Maildir on first delivery.
+`send` prints a message ID. Save it when you need to reply in-thread or confirm the message state.
 
-## OMP integration
+The OMP extension supplies your current session identity through `AGENT_MAIL_ID`. Normally omit `--from`; use it only to override the sender explicitly.
 
-The optional `extensions/agent-mail.ts` extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. It checks the current inbox every minute; after five minutes without user or agent activity, unread messages queue one header-only follow-up turn. It does not modify the parent shell or unrelated Bash commands. Reload OMP after installing or changing the extension.
+## Read and reply
 
-On session start, switch, or fork, the extension adds one hidden persistent context message per branch: `Use AgentMail to communicate with other agents. Run agent-mail prime to learn how to use it.` It checks the stable `agent-mail-context-v2` message type first, so resumed turns reuse the same prompt prefix instead of repeatedly spending cache tokens.
+An inbox notification includes the message ID. You can also list unread headers without changing their state:
 
-## Message state
+```bash
+agent-mail scan --to RECIPIENT
+agent-mail scan --all
+```
 
-- `.Trash/new/` or `.Trash/cur/`: soft-deleted and retained
-- absent: never delivered or removed
+Read a message by ID:
 
-Messages use RFC-822-shaped headers followed by a plain-text body. `receipt` infers state from the file location and reports `discarded` for messages in `.Trash`. It cannot distinguish a message that was never delivered from one removed outside the Maildir.
+```bash
+agent-mail read MSGID
+```
+
+Reading marks unread mail as read. Use `--peek` only when the message must remain unread.
+
+When replying, send to the `Reply-To` header when present; otherwise send to `From`. Preserve the original message ID:
+
+```bash
+agent-mail send --to SENDER \
+  --in-reply-to MSGID \
+  --subject "re: Inspect parser boundary" \
+  --body "The failing case is empty input; parse_header owns the check."
+```
+
+## Confirm or discard
+
+Check a sent message without sending a bare acknowledgement:
+
+```bash
+agent-mail receipt MSGID
+```
+
+Receipts report `unread`, `read`, or `discarded`. An unknown ID means agent-mail cannot find the message; it may never have been delivered or may have been removed.
+
+Soft-delete a message only when retaining it in the active inbox is not useful:
+
+```bash
+agent-mail discard MSGID
+```
 
 ## Boundaries
 
-This is a same-machine, same-filesystem transport. It has no authentication, encryption, wakeup loop, stale-message escalation, or cross-host delivery. Those concerns belong to the harness or a separate integration layer.
+AgentMail works only between sessions sharing the same machine, filesystem, and mail root. The default root is temporary and may be cleared on reboot. Put lasting conclusions in the shared work product before relying on a message handoff.
 
-## Examples
+## Exact command syntax
+
+Use command help for flags and accepted values:
 
 ```bash
-# Inline body
-agent-mail send --to smoke-session --from coordinator --subject "Need evidence" \
-  --body "Please inspect the parser boundary and report the failing case."
-
-# File or stdin body
-agent-mail send --to smoke-session --subject "Handoff" --body-file findings.md
-printf '%s\n' "The fix is ready for review." | agent-mail send --to coordinator
-
-# List unread headers without reading message bodies
-agent-mail scan --to smoke-session
-agent-mail scan --all
-
-# Show the resolved inbox path without creating it
-agent-mail addr smoke-session
-
-# Soft-delete a message while preserving its original read state
-agent-mail discard MSGID
-
-# Read and reply
-agent-mail read MSGID
-agent-mail send --to coordinator --in-reply-to MSGID --subject "re: Handoff" \
-  --body "The requested inspection is complete."
-
-# Check whether a message was read
-agent-mail receipt MSGID
+agent-mail <command> --help
 ```
 "#;
 
-pub fn execute(args: &PrimeArgs) -> Result<()> {
-    println!("{}", generate(args.prelude));
+pub fn execute(_args: &PrimeArgs) -> Result<()> {
+    print!("{MANUAL}");
     Ok(())
-}
-
-pub fn generate(prelude_only: bool) -> String {
-    if prelude_only {
-        return PRELUDE.to_string();
-    }
-
-    let mut manual = PRELUDE.to_string();
-    manual.push_str("\n\n## Command reference\n\n");
-
-    let command = crate::cli::build_cli();
-    for subcommand in command.get_subcommands() {
-        if matches!(subcommand.get_name(), "prime" | "help") {
-            continue;
-        }
-
-        manual.push_str(&format!("### `agent-mail {}`\n\n", subcommand.get_name()));
-        manual.push_str("```text\n");
-        manual.push_str(&subcommand.clone().render_long_help().to_string());
-        if !manual.ends_with('\n') {
-            manual.push('\n');
-        }
-        manual.push_str("```\n\n");
-    }
-
-    manual
-}
-
-pub fn root_after_help() -> String {
-    "Agent workflow:\n  agent-mail prime       Output the complete workflow manual\n  agent-mail <command> --help\n                         Read command-specific options and examples\n\nThe identity layer owns names and recipient directory provisioning. agent-mail owns only local message delivery and read state.".to_string()
 }
 
 #[cfg(test)]
@@ -129,20 +109,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prime_contains_workflow_and_all_supported_commands() {
-        let manual = generate(false);
-        assert!(manual.contains("## Storage model"));
-        assert!(manual.contains("### `agent-mail send`"));
-        assert!(manual.contains("### `agent-mail read`"));
-        assert!(manual.contains("### `agent-mail discard`"));
-        assert!(manual.contains("### `agent-mail receipt`"));
-        assert!(manual.contains("identity layer"));
+    fn prime_contains_the_agent_workflow() {
+        let manual = MANUAL;
+        assert!(manual.contains("agent-id prime"));
+        assert!(manual.contains("agent-mail send"));
+        assert!(manual.contains("agent-mail read"));
+        assert!(manual.contains("agent-mail receipt"));
+        assert!(manual.contains("agent-mail discard"));
     }
 
     #[test]
-    fn prelude_skips_generated_command_reference() {
-        let manual = generate(true);
-        assert!(manual.contains("## Workflow"));
+    fn prime_excludes_implementation_and_generated_reference() {
+        let manual = MANUAL;
+        assert!(!manual.contains("## Storage model"));
         assert!(!manual.contains("## Command reference"));
+        assert!(!manual.contains("extensions/agent-mail.ts"));
     }
 }

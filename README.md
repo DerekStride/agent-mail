@@ -1,8 +1,8 @@
 # agent-mail
 
-`agent-mail` is a local Maildir message bus for coding-agent sessions.
+`agent-mail` lets local coding-agent sessions exchange asynchronous messages. Each recipient has an inbox, so senders can hand off work or report results without keeping both sessions active.
 
-It uses ordinary directories and atomic renames instead of a daemon, network service, database, or lockfile. The identity layer is intentionally separate: when available, `agent-id` supplies a human-readable slug; this project owns mailbox directories, message delivery, and read state.
+Messages stay on the local machine. The CLI uses ordinary files rather than a daemon, network service, or database; the optional OMP extension connects those inboxes to agent sessions.
 
 ## Install
 
@@ -18,124 +18,65 @@ brew install derekstride/tap/agent-mail
 cargo install agent-mail
 ```
 
-### OMP plugin
+### Release binary
 
-Install the binary first, then install the OMP extension from this repository:
+Download the archive for your macOS architecture from [GitHub Releases](https://github.com/DerekStride/agent-mail/releases/latest), extract it, and place `agent-mail` on `PATH`.
+
+## Connect agent-mail to OMP
+
+Install the binary first, then install the extension:
 
 ```bash
 omp plugin install https://github.com/DerekStride/agent-mail
 ```
 
-The extension injects `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail` and maintains the agent's inbox notifications.
+The extension identifies the current OMP session when it invokes `agent-mail`, gives agents access to the built-in workflow guide, and notifies idle sessions about unread mail. Reload OMP after installation.
 
-### Release binary
+[`agent-id`](https://github.com/DerekStride/agent-id) is optional. When installed, it gives mailboxes human-readable agent slugs; without it, session IDs work directly.
 
-Download the archive for your macOS architecture from [GitHub Releases](https://github.com/DerekStride/agent-mail/releases/latest), extract it, and place `agent-mail` on `PATH`.
+## Use it from the shell
 
-## Agent instructions
-
-Run this first in an agent workflow:
+Send a message to a session ID, agent name, or agent slug:
 
 ```bash
-agent-mail prime
-```
-
-`prime` prints the storage model, addressing rules, safety boundaries, examples, and generated command reference. Use command-specific help for flags:
-
-```bash
-agent-mail send --help
-agent-mail read --help
-agent-mail receipt --help
-```
-
-## Storage model
-
-The default mail root is `/tmp/agent-mail`; override it with `AGENT_MAIL_ROOT`.
-
-agent-mail creates the recipient directory and Maildir on first delivery. If `agent-id` is installed and can resolve the identifier, the slug is used; otherwise the supplied session ID is used directly.
-
-`AGENT_MAIL_ID` is the optional current agent session ID. `send` uses it as the default sender identity and resolves it through `agent-id`; `--from` overrides it.
-
-```text
-$AGENT_MAIL_ROOT/<recipient>/
-└── inbox/
-    ├── tmp/  message is being written
-    ├── new/  delivered and unread
-    ├── cur/  read and retained
-    └── .Trash/
-        ├── tmp/
-        ├── new/  soft-deleted unread message
-        └── cur/  soft-deleted read message
-```
-
-`send` writes a complete RFC-822-shaped message to `tmp/`, then atomically renames it into `new/`. `read` moves it into `cur/` unless `--peek` is used. `discard` moves it into `.Trash/new/` or `.Trash/cur/`, preserving its read state. `receipt` reports the resulting state.
-
-Message IDs are 26-character uppercase ULIDs: lexicographically sortable, filename-safe, and globally collision-resistant without embedding process IDs.
-
-The root is local and ephemeral. Do not use it for information that must survive reboot, temporary-file cleanup, or machine loss.
-
-## Commands
-
-```bash
-# Send an inline message; body can also come from --body-file or stdin.
-agent-mail send --to smoke-session --from coordinator \
+agent-mail send --to smoke-session \
   --subject "Need evidence" \
   --body "Please inspect the parser boundary."
+```
 
-# Read a message by ID.
-agent-mail read MSGID
+`send` prints a message ID. Replace `MSGID` below with that value to check whether the recipient has read the message:
 
-# List unread headers without marking messages read.
-agent-mail scan --to smoke-session
-agent-mail scan --all
-
-# Show the resolved inbox path without creating it.
-agent-mail addr smoke-session
-
-# Soft-delete a message while preserving its original read state.
-agent-mail discard MSGID
-
-# Inspect a specific message without changing state.
-agent-mail read MSGID --peek
-
-# Check whether a sent message remains unread or has been read.
+```bash
 agent-mail receipt MSGID
 ```
 
-Recipients may be supplied as a session ID, canonical agent name, or agent slug. If `agent-id` is available and resolves the identifier, its slug selects the mailbox directory; otherwise the identifier itself is used under `AGENT_MAIL_ROOT`.
-
-Human recipients are intentionally deferred; see the future `sq` task for that feature.
-
-## OMP integration
-
-The optional OMP extension injects only `AGENT_MAIL_ID` into Bash calls that invoke `agent-mail`. It also checks the current inbox every minute; after five minutes without user or agent activity, unread messages queue one header-only follow-up turn. It does not modify the parent shell or unrelated Bash commands.
-
-On session start, switch, or fork, it inserts one hidden persistent context message per branch: `Use AgentMail to communicate with other agents. Run agent-mail prime to learn how to use it.` The extension checks the stable `agent-mail-context-v2` message type before inserting, so the instruction is not re-added on every turn and does not churn prompt-cache prefixes.
-
-For local development, link the extension into the active OMP extension directory:
+List unread messages, then read one by its ID:
 
 ```bash
-ln -sf "$PWD/extensions/agent-mail.ts" "$HOME/.omp/agent/extensions/agent-mail.ts"
+agent-mail scan --to smoke-session
+agent-mail read MSGID
 ```
 
-Reload OMP after changing the extension. If `agent-id` is unavailable, agent-mail continues to use session IDs directly.
+Reading marks an unread message as read. Add `--peek` to leave it unread. Message bodies can also come from `--body-file` or standard input.
 
-## Development
+For complete options, run:
 
 ```bash
-cargo fmt --check
-cargo test
-cargo run -- prime
+agent-mail --help
+agent-mail <command> --help
 ```
 
-## Releases
+## Agent workflow
 
-Publishing a GitHub release or pushing a `v*` tag runs the release workflow. It verifies the Cargo version, builds macOS arm64 and Intel archives, uploads checksums to the GitHub release, publishes to crates.io, and updates the Homebrew tap when `HOMEBREW_TAP_TOKEN` is configured.
+`agent-mail prime` prints the workflow agents should follow, including recipient discovery, sending, replying, receipts, and disposal. The OMP extension tells agents to load it automatically; the README does not duplicate those instructions.
 
-The repository workflow expects these GitHub secrets:
+## Data location and limits
 
-- `CARGO_REGISTRY_TOKEN`
-- `HOMEBREW_TAP_TOKEN`
+Mail is stored under `/tmp/agent-mail` by default. Set `AGENT_MAIL_ROOT` to use another location.
+
+The default location is ephemeral and local to one machine. Do not use agent-mail as the only record of work that must survive a reboot, temporary-file cleanup, or machine loss. It does not provide authentication, encryption, or cross-host delivery.
+
+Implementation, command semantics, development commands, and release details are documented in [AGENTS.md](AGENTS.md).
 
 ## License
 
