@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Write as FormatWrite;
 use ulid::Ulid;
 
@@ -93,7 +93,25 @@ pub fn send(args: &SendArgs) -> Result<()> {
             destination.display()
         )
     })?;
-    println!("{msgid}");
+    let delivered_at = Utc::now();
+    if args.json {
+        let receipt = SendReceipt {
+            id: msgid,
+            recipient: mailbox
+                .identity
+                .as_ref()
+                .map(|identity| identity.slug.clone())
+                .unwrap_or_else(|| args.to.clone()),
+            sender,
+            subject: subject.to_string(),
+            timestamp: delivered_at.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            mailbox: mailbox.path.display().to_string(),
+            state: "delivered",
+        };
+        println!("{}", serde_json::to_string(&receipt)?);
+    } else {
+        println!("{msgid}");
+    }
     Ok(())
 }
 
@@ -251,6 +269,17 @@ struct IdentityAssignment {
 struct ResolvedMailbox {
     path: PathBuf,
     identity: Option<IdentityAssignment>,
+}
+
+#[derive(Debug, Serialize)]
+struct SendReceipt {
+    id: String,
+    recipient: String,
+    sender: String,
+    subject: String,
+    timestamp: String,
+    mailbox: String,
+    state: &'static str,
 }
 
 fn resolve_mailbox(root: &Path, input: &str) -> Result<ResolvedMailbox> {

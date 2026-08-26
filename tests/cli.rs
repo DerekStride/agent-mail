@@ -70,6 +70,50 @@ fn send_read_and_receipt_track_maildir_state() {
 }
 
 #[test]
+fn json_send_receipt_describes_delivery() {
+    let root = tempfile::tempdir().unwrap();
+
+    let output = command(&root)
+        .args([
+            "send",
+            "--to",
+            "receiver",
+            "--from",
+            "sender",
+            "--subject",
+            "handoff",
+            "--body",
+            "Tests are green.",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let receipt: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let message_id = receipt["id"].as_str().unwrap();
+
+    assert!(Ulid::from_string(message_id).is_ok());
+    assert_eq!(receipt["recipient"], "receiver");
+    assert_eq!(receipt["sender"], "sender");
+    assert_eq!(receipt["subject"], "handoff");
+    assert_eq!(receipt["state"], "delivered");
+    assert!(receipt["timestamp"]
+        .as_str()
+        .is_some_and(|timestamp| timestamp.ends_with('Z')));
+    assert_eq!(
+        receipt["mailbox"],
+        root.path().join("receiver/inbox").display().to_string()
+    );
+    assert!(root
+        .path()
+        .join("receiver/inbox/new")
+        .join(format!("{message_id}.md"))
+        .is_file());
+}
+
+#[test]
 fn peek_leaves_message_unread() {
     let root = tempfile::tempdir().unwrap();
 
@@ -108,7 +152,8 @@ fn prime_teaches_the_agent_communication_workflow() {
         .stdout(predicate::str::contains("agent-id prime"))
         .stdout(predicate::str::contains("agent-mail send"))
         .stdout(predicate::str::contains("agent-mail read"))
-        .stdout(predicate::str::contains("agent-mail receipt"));
+        .stdout(predicate::str::contains("agent-mail receipt"))
+        .stdout(predicate::str::contains("--json"));
 }
 
 #[test]
@@ -132,12 +177,20 @@ fn agent_id_slug_selects_mailbox_directory() {
         env::var("PATH").unwrap_or_default()
     );
 
-    command(&root)
+    let output = command(&root)
         .env("PATH", path)
         .env("AGENT_MAIL_ID", "smoke-session")
-        .args(["send", "--to", "smoke-session", "--body", "hello"])
+        .args(["send", "--to", "smoke-session", "--body", "hello", "--json"])
         .assert()
-        .success();
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let receipt: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let message_id = receipt["id"].as_str().unwrap();
+    assert!(Ulid::from_string(message_id).is_ok());
+    assert_eq!(receipt["recipient"], "gienah-oak-darkwood");
+    assert_eq!(receipt["sender"], "Gienah Oak of Darkwood");
 
     let message_path = fs::read_dir(root.path().join("gienah-oak-darkwood/inbox/new"))
         .unwrap()

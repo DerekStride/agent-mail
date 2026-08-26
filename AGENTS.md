@@ -11,7 +11,7 @@
 
 agent-mail is a same-machine, same-filesystem message transport for coding-agent sessions. It owns mailbox creation, message delivery, read state, and soft deletion. It does not allocate identities, authenticate senders, encrypt messages, wake remote hosts, or provide durable storage.
 
-`agent-id` is an optional identity layer. If it is unavailable or cannot resolve an identifier, agent-mail uses the supplied session ID, name, or slug directly.
+`agent-id` is an optional identity layer. If it is unavailable, agent-mail uses the supplied session ID, name, or slug directly. When it is available, recipient lookup is authoritative: successful resolution routes through the immutable slug, and lookup failures are surfaced before mailbox creation.
 
 ## Code map
 
@@ -51,7 +51,7 @@ Messages are plain text with RFC-822-shaped headers. IDs are uppercase 26-charac
 
 `AGENT_MAIL_ID` is the optional current session ID. `send` uses it as the default sender; `--from` overrides it.
 
-For each sender or recipient identifier, `src/mail.rs` invokes `agent-id lookup --json` with `AGENT_ID_SESSION_ID` set to that identifier. A successful lookup supplies the display name used in headers and the slug used as the mailbox directory. Failed or unavailable lookup falls back to the original identifier.
+For each sender or recipient identifier, `src/mail.rs` invokes `agent-id lookup <IDENTIFIER> --json`. A successful recipient lookup supplies the display name used in headers and the slug used as the mailbox directory. If Agent ID is unavailable, standalone recipient routing falls back to the supplied identifier; installed-command lookup failures are errors. Sender and reply display lookups remain best-effort.
 
 Identifiers and resolved slugs must be one safe path component: non-empty, not `.` or `..`, and without `/` or NUL. Header values reject CR and LF to prevent header injection.
 
@@ -66,6 +66,8 @@ Identifiers and resolved slugs must be one safe path component: non-empty, not `
 | `discard` | Soft-deletes a known message while preserving read state; an absent valid ID is a successful no-op. |
 | `receipt` | Finds a message globally and reports its state, recipient, delivery time, and age; an unknown ID exits with an error. |
 | `prime` | Prints the agent-facing communication workflow. Exact command options remain in `<command> --help`. |
+
+`send` keeps the bare message ID as its default output for human compatibility. Agent workflows should pass `--json` to receive a stable structured receipt containing `id`, `recipient`, `sender`, `subject`, `timestamp`, `mailbox`, and `state`. `recipient` is the resolved Agent ID slug when available, or the standalone recipient identifier when Agent ID is unavailable.
 
 ## OMP extension
 

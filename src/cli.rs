@@ -61,6 +61,10 @@ pub struct SendArgs {
     /// Read the message body from a file
     #[arg(long, value_name = "PATH", conflicts_with = "body")]
     pub body_file: Option<PathBuf>,
+
+    /// Print a structured JSON delivery receipt
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]

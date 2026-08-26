@@ -25,22 +25,23 @@ agent-id prime
 
 ## Send
 
-Use a specific subject and an actionable body:
+Use a specific subject and an actionable body. Always prefer `--json` in agent workflows so parallel sends remain self-describing:
 
 ```bash
 agent-mail send --to RECIPIENT \
   --subject "Inspect parser boundary" \
-  --body "Find the failing input, identify the owning function, and send the evidence."
+  --body "Find the failing input, identify the owning function, and send the evidence." \
+  --json
 ```
 
-For longer bodies, use a file or stdin:
+For longer bodies, use a file or stdin; keep `--json`:
 
 ```bash
-agent-mail send --to RECIPIENT --subject "Handoff" --body-file findings.txt
-printf '%s\n' "The fix is ready for review." | agent-mail send --to RECIPIENT
+agent-mail send --to RECIPIENT --subject "Handoff" --body-file findings.txt --json
+printf '%s\n' "The fix is ready for review." | agent-mail send --to RECIPIENT --json
 ```
 
-`send` prints a message ID. Save it when you need to reply in-thread or confirm the message state.
+`send` prints a bare message ID by default for human compatibility. With `--json`, it prints a stable receipt containing `id`, `recipient`, `sender`, `subject`, `timestamp`, `mailbox`, and `state`. The recipient is the resolved Agent ID slug when available, or the standalone recipient identifier when Agent ID is unavailable. Save the message ID when you need to reply in-thread or confirm the message state.
 
 The OMP extension supplies your current session identity through `AGENT_MAIL_ID`. Normally omit `--from`; use it only to override the sender explicitly.
 
