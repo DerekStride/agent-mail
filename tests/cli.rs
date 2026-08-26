@@ -7,7 +7,9 @@ use ulid::Ulid;
 
 fn command(root: &TempDir) -> Command {
     let mut command = Command::cargo_bin("agent-mail").unwrap();
-    command.env("AGENT_MAIL_ROOT", root.path());
+    command
+        .env("AGENT_MAIL_ROOT", root.path())
+        .env("PATH", "/usr/bin:/bin");
     command
 }
 
@@ -112,6 +114,8 @@ fn prime_teaches_the_agent_communication_workflow() {
 #[test]
 fn agent_id_slug_selects_mailbox_directory() {
     let root = tempfile::tempdir().unwrap();
+    let legacy = root.path().join("Gienah Oak of Darkwood/inbox");
+    fs::create_dir_all(&legacy).unwrap();
     let tools = tempfile::tempdir().unwrap();
     let agent_id = tools.path().join("agent-id");
     fs::write(
@@ -146,7 +150,33 @@ fn agent_id_slug_selects_mailbox_directory() {
     assert!(message.contains("To: Gienah Oak of Darkwood"));
 
     assert!(root.path().join("gienah-oak-darkwood/inbox/new").is_dir());
+    assert!(legacy.is_dir());
     assert!(!root.path().join("smoke-session").exists());
+}
+
+#[test]
+fn installed_agent_id_lookup_failure_does_not_use_raw_mailbox() {
+    let root = tempfile::tempdir().unwrap();
+    let tools = tempfile::tempdir().unwrap();
+    let agent_id = tools.path().join("agent-id");
+    fs::write(
+        &agent_id,
+        "#!/bin/sh\nprintf '%s\\n' 'identity not registered' >&2\nexit 1\n",
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&agent_id).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&agent_id, permissions).unwrap();
+    let path = format!("{}:/usr/bin:/bin", tools.path().display());
+
+    command(&root)
+        .env("PATH", path)
+        .args(["send", "--to", "unregistered-session", "--body", "hello"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("agent-id lookup failed"));
+
+    assert!(!root.path().join("unregistered-session").exists());
 }
 
 #[test]

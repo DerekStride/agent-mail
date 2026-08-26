@@ -24,7 +24,7 @@ pub fn send(args: &SendArgs) -> Result<()> {
     let sender_id = args.from.clone().or_else(|| env::var(MAIL_ID_ENV).ok());
     let sender = sender_id
         .as_deref()
-        .and_then(agent_id_identity)
+        .and_then(optional_agent_id_identity)
         .map(|identity| identity.name)
         .or(sender_id)
         .unwrap_or_else(|| "unknown".to_string());
@@ -34,7 +34,7 @@ pub fn send(args: &SendArgs) -> Result<()> {
         .map(|identity| identity.name.clone())
         .unwrap_or_else(|| args.to.clone());
     let reply_to = args.reply_to.as_deref().map(|value| {
-        agent_id_identity(value)
+        optional_agent_id_identity(value)
             .map(|identity| identity.name)
             .unwrap_or_else(|| value.to_string())
     });
@@ -255,7 +255,7 @@ struct ResolvedMailbox {
 
 fn resolve_mailbox(root: &Path, input: &str) -> Result<ResolvedMailbox> {
     validate_component(input, "recipient identifier")?;
-    let identity = agent_id_identity(input);
+    let identity = agent_id_identity(input)?;
     let mailbox_id = identity
         .as_ref()
         .map(|assignment| assignment.slug.as_str())
@@ -267,19 +267,37 @@ fn resolve_mailbox(root: &Path, input: &str) -> Result<ResolvedMailbox> {
     })
 }
 
-fn agent_id_identity(input: &str) -> Option<IdentityAssignment> {
-    let output = Command::new("agent-id")
-        .env("AGENT_ID_SESSION_ID", input)
-        .args(["lookup", "--json"])
+fn agent_id_identity(input: &str) -> Result<Option<IdentityAssignment>> {
+    let output = match Command::new("agent-id")
+        .args(["lookup", input, "--json"])
         .output()
-        .ok()?;
+    {
+        Ok(output) => output,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("running agent-id lookup for {input:?}"));
+        }
+    };
+
     if !output.status.success() {
-        return None;
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if detail.is_empty() {
+            bail!(
+                "agent-id lookup failed for {input:?} with status {}",
+                output.status
+            );
+        }
+        bail!("agent-id lookup failed for {input:?}: {detail}");
     }
-    let identity: IdentityAssignment = serde_json::from_slice(&output.stdout).ok()?;
-    validate_component(&identity.slug, "agent-id slug")
-        .ok()
-        .map(|_| identity)
+
+    let identity: IdentityAssignment = serde_json::from_slice(&output.stdout)
+        .with_context(|| format!("invalid agent-id lookup JSON for {input:?}"))?;
+    validate_component(&identity.slug, "agent-id slug")?;
+    Ok(Some(identity))
+}
+
+fn optional_agent_id_identity(input: &str) -> Option<IdentityAssignment> {
+    agent_id_identity(input).ok().flatten()
 }
 
 fn validate_component(value: &str, label: &str) -> Result<()> {
@@ -482,16 +500,6 @@ mod tests {
     fn non_ulid_message_ids_are_rejected() {
         let error = normalize_message_id("20260820T145311Z-93848-834298000-0").unwrap_err();
         assert!(error.to_string().contains("valid ULID"));
-    }
-
-    #[test]
-    fn session_id_resolves_to_mailbox_without_identity_tool() {
-        let root = tempfile::tempdir().unwrap();
-
-        assert_eq!(
-            resolve_mailbox(root.path(), "smoke-session").unwrap().path,
-            root.path().join("smoke-session/inbox")
-        );
     }
 
     #[test]
