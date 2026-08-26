@@ -104,7 +104,7 @@ Reload OMP after installing or changing the extension. If `agent-id` is unavaila
 
 ## Release reference
 
-`.github/workflows/publish.yml` runs for published GitHub releases and `v*` tag pushes. It first verifies that the tag matches `Cargo.toml`. A published release builds arm64 and Intel macOS archives, uploads each archive and checksum, publishes to crates.io, and updates the Homebrew tap for non-prereleases when the tap token is configured.
+`.github/workflows/publish.yml` runs for published GitHub releases and `v*` tag pushes. It verifies that the tag matches the Rust package version in `Cargo.toml`; keep the matching OMP extension version in `package.json` updated for every release. A published release builds arm64 and Intel macOS archives, uploads each archive and checksum, publishes to crates.io, and updates the Homebrew tap for non-prereleases when the tap token is configured.
 
 Required repository secrets:
 
