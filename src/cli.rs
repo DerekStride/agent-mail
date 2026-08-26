@@ -76,6 +76,10 @@ pub struct ScanArgs {
     /// List unread messages in every agent inbox
     #[arg(long, conflicts_with = "to")]
     pub all: bool,
+
+    /// Print unread messages as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]
@@ -83,6 +87,10 @@ pub struct AddrArgs {
     /// Recipient session ID, canonical name, or agent slug
     #[arg(value_name = "RECIPIENT")]
     pub recipient: String,
+
+    /// Print the resolved address as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]
@@ -108,6 +116,10 @@ pub struct ReceiptArgs {
     /// Message ID printed by send
     #[arg(value_name = "MSGID")]
     pub message_id: String,
+
+    /// Print the receipt as JSON
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]

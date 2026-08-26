@@ -117,7 +117,20 @@ pub fn send(args: &SendArgs) -> Result<()> {
 
 pub fn addr(args: &AddrArgs) -> Result<()> {
     let mailbox = resolve_mailbox(&mail_root(), &args.recipient)?;
-    println!("{}", mailbox.path.display());
+    if args.json {
+        let recipient = mailbox
+            .identity
+            .as_ref()
+            .map(|identity| identity.slug.clone())
+            .unwrap_or_else(|| args.recipient.clone());
+        let address = AddressResult {
+            recipient,
+            mailbox: mailbox.path.display().to_string(),
+        };
+        println!("{}", serde_json::to_string(&address)?);
+    } else {
+        println!("{}", mailbox.path.display());
+    }
     Ok(())
 }
 pub fn scan(args: &ScanArgs) -> Result<()> {
@@ -137,6 +150,7 @@ pub fn scan(args: &ScanArgs) -> Result<()> {
     inboxes.sort();
 
     let mut found = false;
+    let mut entries = Vec::new();
     for inbox in inboxes {
         for message in unread_messages(&inbox)? {
             found = true;
@@ -146,17 +160,28 @@ pub fn scan(args: &ScanArgs) -> Result<()> {
                 .context("unread message has no valid filename")?;
             let from = message_header(&message, "From")?.unwrap_or_else(|| "unknown".to_string());
             let subject = message_header(&message, "Subject")?.unwrap_or_default();
-            println!(
-                "{}\t{}\tfrom:{}\t{}",
-                inbox.display(),
-                message_id,
-                from,
-                subject
-            );
+            if args.json {
+                entries.push(ScanEntry {
+                    mailbox: inbox.display().to_string(),
+                    id: message_id.to_string(),
+                    sender: from,
+                    subject,
+                });
+            } else {
+                println!(
+                    "{}\t{}\tfrom:{}\t{}",
+                    inbox.display(),
+                    message_id,
+                    from,
+                    subject
+                );
+            }
         }
     }
 
-    if !found {
+    if args.json {
+        println!("{}", serde_json::to_string(&entries)?);
+    } else if !found {
         println!("(no unread messages)");
     }
     Ok(())
@@ -246,7 +271,18 @@ pub fn receipt(args: &ReceiptArgs) -> Result<()> {
             .unwrap_or("unknown");
         let age = message_age_hours(&message_id);
         let delivered = delivered_timestamp(&message_id);
-        println!("{state}\t{message_id}\tto:{recipient}\tdelivered:{delivered}\t{age}h ago");
+        if args.json {
+            let receipt = MessageReceipt {
+                id: message_id.clone(),
+                recipient: recipient.to_string(),
+                state: state.to_string(),
+                delivered_at: delivered,
+                age_hours: age,
+            };
+            println!("{}", serde_json::to_string(&receipt)?);
+        } else {
+            println!("{state}\t{message_id}\tto:{recipient}\tdelivered:{delivered}\t{age}h ago");
+        }
         return Ok(());
     }
 
@@ -280,6 +316,29 @@ struct SendReceipt {
     timestamp: String,
     mailbox: String,
     state: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct ScanEntry {
+    mailbox: String,
+    id: String,
+    sender: String,
+    subject: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AddressResult {
+    recipient: String,
+    mailbox: String,
+}
+
+#[derive(Debug, Serialize)]
+struct MessageReceipt {
+    id: String,
+    recipient: String,
+    state: String,
+    delivered_at: String,
+    age_hours: i64,
 }
 
 fn resolve_mailbox(root: &Path, input: &str) -> Result<ResolvedMailbox> {

@@ -45,13 +45,34 @@ printf '%s\n' "The fix is ready for review." | agent-mail send --to RECIPIENT --
 
 The OMP extension supplies your current session identity through `AGENT_MAIL_ID`. Normally omit `--from`; use it only to override the sender explicitly.
 
+## Scan
+
+List unread headers for one recipient or every inbox:
+
+```bash
+agent-mail scan --to RECIPIENT --json
+agent-mail scan --all --json
+```
+
+`scan --json` prints an array of objects with `mailbox`, `id`, `sender`, and `subject`.
+
+## Address
+
+Resolve a recipient without creating its mailbox:
+
+```bash
+agent-mail addr RECIPIENT --json
+```
+
+`addr --json` prints an object with `recipient` and `mailbox`.
+
 ## Read and reply
 
 An inbox notification includes the message ID. You can also list unread headers without changing their state:
 
 ```bash
-agent-mail scan --to RECIPIENT
-agent-mail scan --all
+agent-mail scan --to RECIPIENT --json
+agent-mail scan --all --json
 ```
 
 Read a message by ID:
@@ -68,7 +89,8 @@ When replying, send to the `Reply-To` header when present; otherwise send to `Fr
 agent-mail send --to SENDER \
   --in-reply-to MSGID \
   --subject "re: Inspect parser boundary" \
-  --body "The failing case is empty input; parse_header owns the check."
+  --body "The failing case is empty input; parse_header owns the check." \
+  --json
 ```
 
 ## Confirm or discard
@@ -76,10 +98,12 @@ agent-mail send --to SENDER \
 Check a sent message without sending a bare acknowledgement:
 
 ```bash
-agent-mail receipt MSGID
+agent-mail receipt MSGID --json
 ```
 
 Receipts report `unread`, `read`, or `discarded`. An unknown ID means agent-mail cannot find the message; it may never have been delivered or may have been removed.
+
+`receipt --json` prints an object with `id`, `recipient`, `state`, `delivered_at`, and `age_hours`.
 
 Soft-delete a message only when retaining it in the active inbox is not useful:
 

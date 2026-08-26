@@ -114,6 +114,126 @@ fn json_send_receipt_describes_delivery() {
 }
 
 #[test]
+fn json_addr_describes_recipient_mailbox() {
+    let root = tempfile::tempdir().unwrap();
+
+    let output = command(&root)
+        .args(["addr", "receiver", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let address: serde_json::Value = serde_json::from_slice(&output).unwrap();
+
+    assert_eq!(address["recipient"], "receiver");
+    assert_eq!(
+        address["mailbox"],
+        root.path().join("receiver/inbox").display().to_string()
+    );
+    assert!(!root.path().join("receiver").exists());
+}
+
+#[test]
+fn json_scan_describes_unread_messages() {
+    let root = tempfile::tempdir().unwrap();
+
+    command(&root)
+        .args([
+            "send",
+            "--to",
+            "receiver",
+            "--from",
+            "sender",
+            "--subject",
+            "handoff",
+            "--body",
+            "Tests are green.",
+        ])
+        .assert()
+        .success();
+
+    let output = command(&root)
+        .args(["scan", "--to", "receiver", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let entries: Vec<serde_json::Value> = serde_json::from_slice(&output).unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+        entries[0]["mailbox"],
+        root.path().join("receiver/inbox").display().to_string()
+    );
+    assert_eq!(entries[0]["sender"], "sender");
+    assert_eq!(entries[0]["subject"], "handoff");
+    assert!(Ulid::from_string(entries[0]["id"].as_str().unwrap()).is_ok());
+}
+
+#[test]
+fn json_scan_empty_result_is_an_array() {
+    let root = tempfile::tempdir().unwrap();
+
+    let output = command(&root)
+        .args(["scan", "--all", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let entries: Vec<serde_json::Value> = serde_json::from_slice(&output).unwrap();
+
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn json_receipt_describes_message_state() {
+    let root = tempfile::tempdir().unwrap();
+
+    let output = command(&root)
+        .args(["send", "--to", "receiver", "--body", "hello"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let message_id = String::from_utf8(output).unwrap().trim().to_string();
+
+    let output = command(&root)
+        .args(["receipt", &message_id, "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let receipt: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(receipt["id"], message_id);
+    assert_eq!(receipt["recipient"], "receiver");
+    assert_eq!(receipt["state"], "unread");
+    assert!(receipt["delivered_at"]
+        .as_str()
+        .is_some_and(|timestamp| timestamp.ends_with('Z')));
+    assert!(receipt["age_hours"].as_i64().is_some_and(|age| age >= 0));
+
+    command(&root)
+        .args(["read", &message_id])
+        .assert()
+        .success();
+
+    let output = command(&root)
+        .args(["receipt", &message_id, "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let receipt: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(receipt["state"], "read");
+}
+
+#[test]
 fn peek_leaves_message_unread() {
     let root = tempfile::tempdir().unwrap();
 
@@ -153,7 +273,9 @@ fn prime_teaches_the_agent_communication_workflow() {
         .stdout(predicate::str::contains("agent-mail send"))
         .stdout(predicate::str::contains("agent-mail read"))
         .stdout(predicate::str::contains("agent-mail receipt"))
-        .stdout(predicate::str::contains("--json"));
+        .stdout(predicate::str::contains("scan --to RECIPIENT --json"))
+        .stdout(predicate::str::contains("addr RECIPIENT --json"))
+        .stdout(predicate::str::contains("receipt MSGID --json"));
 }
 
 #[test]

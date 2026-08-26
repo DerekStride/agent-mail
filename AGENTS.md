@@ -59,15 +59,17 @@ Identifiers and resolved slugs must be one safe path component: non-empty, not `
 
 | Command | Contract |
 |---|---|
-| `send` | Requires `--to`; accepts an inline body, `--body-file`, or stdin; creates the recipient inbox; prints the message ID only. |
-| `scan` | Requires exactly one of `--to ID` or `--all`; prints unread headers without message bodies or state changes. |
-| `addr` | Resolves and prints a recipient inbox path without creating it. |
+| `send` | Requires `--to`; accepts an inline body, `--body-file`, or stdin; creates the recipient inbox; prints the message ID by default or a structured receipt with `--json`. |
+| `scan` | Requires exactly one of `--to ID` or `--all`; prints unread headers without message bodies or state changes; `--json` emits an array of unread-message objects. |
+| `addr` | Resolves and prints a recipient inbox path without creating it; `--json` emits a recipient/mailbox object. |
 | `read` | Finds a message globally by ID, prints it, and marks unread mail read unless `--peek` is set. |
 | `discard` | Soft-deletes a known message while preserving read state; an absent valid ID is a successful no-op. |
-| `receipt` | Finds a message globally and reports its state, recipient, delivery time, and age; an unknown ID exits with an error. |
+| `receipt` | Finds a message globally and reports its state, recipient, delivery time, and age; `--json` emits an object with `id`, `recipient`, `state`, `delivered_at`, and `age_hours`; an unknown ID exits with an error. |
 | `prime` | Prints the agent-facing communication workflow. Exact command options remain in `<command> --help`. |
 
 `send` keeps the bare message ID as its default output for human compatibility. Agent workflows should pass `--json` to receive a stable structured receipt containing `id`, `recipient`, `sender`, `subject`, `timestamp`, `mailbox`, and `state`. `recipient` is the resolved Agent ID slug when available, or the standalone recipient identifier when Agent ID is unavailable.
+
+`scan --json` objects contain `mailbox`, `id`, `sender`, and `subject`. `addr --json` contains `recipient` and `mailbox`. `receipt --json` contains `id`, `recipient`, `state`, `delivered_at`, and `age_hours`. Human-readable output remains the default for all three commands.
 
 ## OMP extension
 
