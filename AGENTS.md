@@ -24,6 +24,7 @@ agent-mail is a same-machine, same-filesystem message transport for coding-agent
 | `extensions/agent-mail.ts` | OMP session identity injection, lifecycle state, and inbox wakeups |
 | `tests/cli.rs` | End-to-end CLI and Maildir behavior |
 | `scripts/generate-homebrew-formula.sh` | Release-time Homebrew formula generation |
+| `scripts/generate-release-notes.py` | Conventional-commit GitHub release note generation |
 
 ## Storage and state
 
@@ -104,7 +105,7 @@ Reload OMP after installing or changing the extension. If `agent-id` is unavaila
 
 ## Release reference
 
-`.github/workflows/publish.yml` runs for published GitHub releases and `v*` tag pushes. It verifies that the tag matches the Rust package version in `Cargo.toml`; keep the matching OMP extension version in `package.json` updated for every release. A published release builds arm64 and Intel macOS archives, uploads each archive and checksum, publishes to crates.io, and updates the Homebrew tap for non-prereleases when the tap token is configured.
+`.github/workflows/publish.yml` runs for `v*` tag pushes. It verifies the tag matches the Rust package version, generates release notes from conventional commits since the previous tag, creates or updates the GitHub release, builds macOS artifacts, uploads them, publishes to crates.io, and updates the Homebrew tap for non-prereleases when the tap token is configured. Keep the matching OMP extension version in `package.json` updated for every release.
 
 Required repository secrets:
 

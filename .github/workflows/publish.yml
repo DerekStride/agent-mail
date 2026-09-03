@@ -1,8 +1,6 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
   push:
     tags:
       - "v*"
@@ -16,16 +14,14 @@ env:
 jobs:
   version-check:
     name: Verify tag matches Cargo.toml version
-    if: |
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v'))
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+          ref: ${{ github.ref }}
 
       - name: Extract version from Cargo.toml
         id: cargo_version
@@ -35,11 +31,7 @@ jobs:
 
       - name: Compare tag and Cargo.toml version
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            TAG="${{ github.event.release.tag_name }}"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
+          TAG="${GITHUB_REF#refs/tags/}"
 
           TAG_VERSION="${TAG#v}"
           if [ "$TAG_VERSION" != "${{ steps.cargo_version.outputs.version }}" ]; then
@@ -47,10 +39,41 @@ jobs:
             exit 1
           fi
 
+  release-notes:
+    name: Generate release notes
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: version-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout all tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Generate release notes
+        run: python3 scripts/generate-release-notes.py --tag "$GITHUB_REF_NAME" > release-notes.md
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file release-notes.md
+          fi
+
   build-macos-artifacts:
     name: Build macOS release artifacts (${{ matrix.target }})
-    if: github.event_name == 'release' && github.event.action == 'published'
-    needs: version-check
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - version-check
+      - release-notes
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -65,7 +88,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.ref }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -89,7 +112,7 @@ jobs:
 
       - name: Package release archive
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${GITHUB_REF_NAME}"
           ARCHIVE="agent-mail-${TAG}-${{ matrix.target }}.tar.gz"
           STAGE_DIR="dist/${{ matrix.target }}"
 
@@ -111,7 +134,7 @@ jobs:
 
   publish-release-assets:
     name: Upload macOS assets to GitHub Release
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build-macos-artifacts
     runs-on: ubuntu-latest
     permissions:
@@ -129,14 +152,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber
 
   update-homebrew-tap:
     name: Update Homebrew tap formula
-    if: |
-      github.event_name == 'release' &&
-      github.event.action == 'published' &&
-      !github.event.release.prerelease
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
     needs:
       - build-macos-artifacts
       - publish-release-assets
@@ -164,7 +184,7 @@ jobs:
       - name: Update tap repository
         if: env.HOMEBREW_TAP_TOKEN != ''
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           ARM_SHA=$(cat "dist/agent-mail-${TAG}-aarch64-apple-darwin.tar.gz.sha256")
           INTEL_SHA=$(cat "dist/agent-mail-${TAG}-x86_64-apple-darwin.tar.gz.sha256")
@@ -190,15 +210,17 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    if: github.event_name == 'release' && github.event.action == 'published'
-    needs: version-check
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - version-check
+      - release-notes
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.ref }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
