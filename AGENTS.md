@@ -21,7 +21,7 @@ agent-mail is a same-machine, same-filesystem message transport for coding-agent
 | `src/mail.rs` | Address resolution, Maildir operations, message formatting, and receipts |
 | `src/prime.rs` | Agent-facing workflow printed by `agent-mail prime` |
 | `src/main.rs` | CLI dispatch and top-level error reporting |
-| `extensions/agent-mail.ts` | OMP session identity injection, persistent agent context, and inbox wakeups |
+| `extensions/agent-mail.ts` | OMP session identity injection, lifecycle state, and inbox wakeups |
 | `tests/cli.rs` | End-to-end CLI and Maildir behavior |
 | `scripts/generate-homebrew-formula.sh` | Release-time Homebrew formula generation |
 
@@ -73,7 +73,7 @@ Identifiers and resolved slugs must be one safe path component: non-empty, not `
 
 ## OMP extension
 
-`extensions/agent-mail.ts` installs one hidden persistent context message per branch under the stable `agent-mail-context-v2` type. The message directs agents to `agent-mail prime` without changing the visible conversation or repeatedly altering the prompt prefix.
+The plugin bundles `skills/agent-mail/SKILL.md` for on-demand workflow guidance. The extension does not add instructional messages to session context.
 
 For matching `agent-mail` invocations through OMP's Bash tool, the extension injects the current session ID as `AGENT_MAIL_ID`. It preserves a caller-provided value and does not modify the parent shell or unrelated Bash calls.
 

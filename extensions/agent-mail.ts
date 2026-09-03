@@ -3,7 +3,6 @@ import { execFileSync } from "node:child_process";
 type SessionContext = {
   sessionManager: {
     getSessionId(): string | undefined;
-    getBranch(): unknown[];
   };
   setInterval(callback: () => void, delay: number): unknown;
   clearTimer(timer: unknown): void;
@@ -45,9 +44,6 @@ type UnreadMessage = {
 
 const AGENT_MAIL_COMMAND =
   /(?:^|[;&|]\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)(?:\S*\/)?agent-mail(?=\s|$)/;
-const CONTEXT_MESSAGE_TYPE = "agent-mail-context-v2";
-const CONTEXT_MESSAGE_CONTENT =
-  "Use AgentMail to communicate with other agents. Run `agent-mail prime` to learn how to use it.";
 const CHECK_INTERVAL_MS = 60_000;
 const IDLE_THRESHOLD_MS = 5 * 60_000;
 
@@ -62,23 +58,6 @@ type SessionState = {
 };
 
 const sessions = new Map<string, SessionState>();
-
-function branchHasContextMessage(entries: unknown[]): boolean {
-  return entries.some((entry) => {
-    if (!entry || typeof entry !== "object") return false;
-    const candidate = entry as { type?: unknown; customType?: unknown };
-    return candidate.type === "custom_message" && candidate.customType === CONTEXT_MESSAGE_TYPE;
-  });
-}
-
-function ensureContextMessage(context: SessionContext, pi: ExtensionAPI): void {
-  if (branchHasContextMessage(context.sessionManager.getBranch())) return;
-  pi.sendMessage({
-    customType: CONTEXT_MESSAGE_TYPE,
-    content: CONTEXT_MESSAGE_CONTENT,
-    display: false,
-  });
-}
 
 function refreshSession(context: SessionContext, pi: ExtensionAPI): void {
   const sessionId = context.sessionManager.getSessionId();
@@ -205,15 +184,12 @@ function injectIdentityForMail(
 
 export default function agentMailExtension(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, context) => {
-    ensureContextMessage(context, pi);
     refreshSession(context, pi);
   });
   pi.on("session_switch", (_event, context) => {
-    ensureContextMessage(context, pi);
     refreshSession(context, pi);
   });
   pi.on("session_fork", (_event, context) => {
-    ensureContextMessage(context, pi);
     refreshSession(context, pi);
   });
   pi.on("session_shutdown", (_event, context) => stopSession(context));

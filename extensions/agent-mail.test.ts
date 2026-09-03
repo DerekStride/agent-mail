@@ -10,7 +10,6 @@ type TestTimer = {
 type TestContext = {
   sessionManager: {
     getSessionId(): string;
-    getBranch(): unknown[];
   };
   setInterval(callback: () => void, delay: number): unknown;
   clearTimer(timer: unknown): void;
@@ -26,7 +25,6 @@ function context(sessionId: string): TestContext {
   return {
     sessionManager: {
       getSessionId: () => sessionId,
-      getBranch: () => [],
     },
     setInterval(callback, delay) {
       const timer = { callback, delay };
@@ -43,11 +41,14 @@ function context(sessionId: string): TestContext {
 
 test("session identity and wake timers stay isolated", () => {
   const handlers: Record<string, Handler> = {};
+  const sentMessages: unknown[] = [];
   const api = {
     on(event: string, handler: Handler) {
       handlers[event] = handler;
     },
-    sendMessage() {},
+    sendMessage(message: unknown) {
+      sentMessages.push(message);
+    },
   };
   agentMailExtension(api as never);
 
@@ -55,6 +56,7 @@ test("session identity and wake timers stay isolated", () => {
   const child = context("child-session");
   handlers.session_start?.({}, parent);
   handlers.session_fork?.({}, child);
+  expect(sentMessages).toEqual([]);
   expect(parent.timers).toHaveLength(1);
   expect(child.timers).toHaveLength(1);
   expect(parent.clearedTimers).toEqual([]);

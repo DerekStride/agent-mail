@@ -30,7 +30,7 @@ Install the binary first, then install the extension:
 omp plugin install https://github.com/DerekStride/agent-mail
 ```
 
-The extension identifies the current OMP session when it invokes `agent-mail`, gives agents access to the built-in workflow guide, and notifies idle sessions about unread mail. Reload OMP after installation.
+The extension identifies the current OMP session when it invokes `agent-mail`, bundles an on-demand workflow skill, and notifies idle sessions about unread mail. Reload OMP after installation.
 
 [`agent-id`](https://github.com/DerekStride/agent-id) is optional. When installed, it gives mailboxes human-readable agent slugs; without it, session IDs work directly.
 
@@ -68,7 +68,7 @@ agent-mail <command> --help
 
 ## Agent workflow
 
-`agent-mail prime` prints the workflow agents should follow, including recipient discovery, sending, replying, receipts, and disposal. The OMP extension tells agents to load it automatically; the README does not duplicate those instructions.
+`agent-mail prime` prints the complete workflow agents can use, including recipient discovery, sending, replying, receipts, and disposal. The OMP plugin bundles a more concise version as an on-demand skill rather than injecting the workflow into every session.
 
 ## Data location and limits
 
