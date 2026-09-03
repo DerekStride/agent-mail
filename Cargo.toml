@@ -1,6 +1,6 @@
 [package]
 name = "agent-mail"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Local Maildir message bus for coding agents"
 license = "MIT"
