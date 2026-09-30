@@ -2,7 +2,7 @@
 
 `agent-mail` lets local coding-agent sessions exchange asynchronous messages. Each recipient has an inbox, so senders can hand off work or report results without keeping both sessions active.
 
-Messages stay on the local machine. The CLI uses ordinary files rather than a daemon, network service, or database; the optional OMP extension connects those inboxes to agent sessions.
+Messages stay on the local machine. The CLI uses ordinary files rather than a daemon, network service, or database; the optional OMP/Pi extension connects those inboxes to agent sessions.
 
 ## Install
 
@@ -22,15 +22,19 @@ cargo install agent-mail
 
 Download the archive for your macOS architecture from [GitHub Releases](https://github.com/DerekStride/agent-mail/releases/latest), extract it, and place `agent-mail` on `PATH`.
 
-## Connect agent-mail to OMP
+## Connect agent-mail to OMP or Pi
 
-Install the binary first, then install the extension:
+Install the binary first, then install the extension for your host:
 
 ```bash
+# OMP
 omp plugin install https://github.com/DerekStride/agent-mail
+
+# Pi
+pi install git:github.com/DerekStride/agent-mail
 ```
 
-The extension identifies the current OMP session when it invokes `agent-mail`, bundles an on-demand workflow skill, and notifies idle sessions about unread mail. Reload OMP after installation.
+The extension identifies the current session when it invokes `agent-mail`, bundles an on-demand workflow skill, and notifies idle sessions about unread mail. Reload your agent after installation.
 
 [`agent-id`](https://github.com/DerekStride/agent-id) is optional. When installed, it gives mailboxes human-readable agent slugs; without it, session IDs work directly.
 
@@ -68,7 +72,7 @@ agent-mail <command> --help
 
 ## Agent workflow
 
-`agent-mail prime` prints the complete workflow agents can use, including recipient discovery, sending, replying, receipts, and disposal. The OMP plugin bundles a more concise version as an on-demand skill rather than injecting the workflow into every session.
+`agent-mail prime` prints the complete workflow agents can use, including recipient discovery, sending, replying, receipts, and disposal. The extension package bundles a more concise version as an on-demand skill rather than injecting the workflow into every session.
 
 ## Data location and limits
 

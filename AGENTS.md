@@ -21,7 +21,8 @@ agent-mail is a same-machine, same-filesystem message transport for coding-agent
 | `src/mail.rs` | Address resolution, Maildir operations, message formatting, and receipts |
 | `src/prime.rs` | Agent-facing workflow printed by `agent-mail prime` |
 | `src/main.rs` | CLI dispatch and top-level error reporting |
-| `extensions/agent-mail.ts` | OMP session identity injection, lifecycle state, and inbox wakeups |
+| `extensions/agent-mail.ts` | Shared session activity, lifecycle state, and inbox wakeups |
+| `extensions/lib/host.ts` | OMP/Pi detection, timers, lifecycle differences, and identity injection |
 | `tests/cli.rs` | End-to-end CLI and Maildir behavior |
 | `scripts/generate-homebrew-formula.sh` | Release-time Homebrew formula generation |
 | `scripts/generate-release-notes.py` | Conventional-commit GitHub release note generation |
@@ -72,13 +73,21 @@ Identifiers and resolved slugs must be one safe path component: non-empty, not `
 
 `scan --json` objects contain `mailbox`, `id`, `sender`, and `subject`. `addr --json` contains `recipient` and `mailbox`. `receipt --json` contains `id`, `recipient`, `state`, `delivered_at`, and `age_hours`. Human-readable output remains the default for all three commands.
 
-## OMP extension
+## OMP and Pi extension
 
-The plugin bundles `skills/agent-mail/SKILL.md` for on-demand workflow guidance. The extension does not add instructional messages to session context.
+The package bundles `skills/agent-mail/SKILL.md` for on-demand workflow guidance. The extension does not inject the workflow into session context.
 
-For matching `agent-mail` invocations through OMP's Bash tool, the extension injects the current session ID as `AGENT_MAIL_ID`. It preserves a caller-provided value and does not modify the parent shell or unrelated Bash calls.
+Keep the CLI host-independent: `AGENT_MAIL_ID` is the integration point. Do not add `PI_*` or `OMP_*` identity fallbacks to the Rust CLI.
 
-The extension scans the current inbox once per minute. After five minutes without user or agent activity, fresh unread messages trigger one header-only follow-up turn. Session start and switch reset the timer and wakeup state; shutdown clears them.
+Encapsulate host differences in `extensions/lib/host.ts`, not in the shared mail workflow. Detect OMP by the presence of both context-managed timer methods (`setInterval` and `clearTimer`); otherwise use the Pi adapter. Do not detect hosts through process environment markers, which nested agents can inherit.
+
+- OMP keeps its managed timers and uses `session_switch` for new/resume/fork transitions. Tool-call argument changes are returned as `{ input }`.
+- Pi uses unreferenced Node timers, cleaned up on `session_shutdown`; `session_start` covers session replacement and reload. Tool-call argument changes mutate `event.input` in place.
+- Neither host's Bash tool consumes `input.env`. For matching `agent-mail` calls, the adapter wraps the command in a subshell that supplies `AGENT_MAIL_ID` only if unset. Inherited values (including empty values) and inline overrides are preserved. All shell state changes in that matching call are scoped to the subshell; the parent shell and unrelated Bash calls are unchanged.
+
+The extension scans the current inbox once per minute. After five minutes without user or agent activity, fresh unread messages trigger one header-only follow-up turn. Busy hosts and pending input suppress wakeups. Session changes cancel the previous timer and reset wakeup state; shutdown cleanup is idempotent. State belongs to each extension instance, never a module-global session map.
+
+Maintain both host test suites together: `extensions/agent-mail.test.ts` exercises OMP's managed timers and returned arguments under Bun; `extensions/agent-mail.pi.test.ts` exercises Pi's native timers and in-place arguments under Node. Duplicated fixtures are intentional. When changing shared behavior, add matching assertions to both suites; test lifecycle differences with each host's real event names. Keep package manifests explicit so tests and adapter helpers are never loaded as extensions.
 
 ## Development
 
@@ -87,7 +96,11 @@ CI runs:
 ```bash
 cargo fmt --all -- --check
 cargo test --all --locked --verbose
+bun run test:omp
+bun run test:pi
 ```
+
+The extension suites require Bun 1.3.14+ and Node 24+ respectively. They run isolated shell fixtures, not real inboxes. When changing adapter contracts, also smoke-test against the installed host loader/runner; mocked host contexts alone do not establish compatibility.
 
 Exercise the agent guide with:
 
@@ -95,13 +108,14 @@ Exercise the agent guide with:
 cargo run -- prime
 ```
 
-For local OMP extension development:
+For local extension development, install the repository as a package so the shared adapter resolves alongside the entry point:
 
 ```bash
-ln -sf "$PWD/extensions/agent-mail.ts" "$HOME/.omp/agent/extensions/agent-mail.ts"
+omp plugin install "$PWD"
+pi install "$PWD"
 ```
 
-Reload OMP after installing or changing the extension. If `agent-id` is unavailable, test the direct session-ID fallback rather than requiring it.
+Reload the relevant host after installing or changing the extension. If `agent-id` is unavailable, test the direct session-ID fallback rather than requiring it.
 
 ## Release reference
 

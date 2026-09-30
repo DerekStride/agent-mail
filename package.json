@@ -1,6 +1,6 @@
 {
   "name": "agent-mail",
-  "description": "Local Maildir message bus and OMP extension for coding-agent sessions",
+  "description": "Local Maildir message bus and OMP/Pi extension for coding-agent sessions",
   "version": "0.2.3",
   "private": true,
   "license": "MIT",
@@ -11,6 +11,18 @@
   "type": "module",
   "engines": {
     "bun": ">=1.3.14"
+  },
+  "scripts": {
+    "test:omp": "bun test extensions/agent-mail.test.ts",
+    "test:pi": "node --test extensions/agent-mail.pi.test.ts"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/agent-mail.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "omp": {
     "extensions": [

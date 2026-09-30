@@ -1,40 +1,11 @@
 import { execFileSync } from "node:child_process";
 
-type SessionContext = {
-  sessionManager: {
-    getSessionId(): string | undefined;
-  };
-  setInterval(callback: () => void, delay: number): unknown;
-  clearTimer(timer: unknown): void;
-};
-
-type ToolCallEvent = {
-  toolName: string;
-  input: Record<string, unknown>;
-};
-
-type ExtensionAPI = {
-  on(
-    event:
-      | "session_start"
-      | "session_switch"
-      | "session_fork"
-      | "session_shutdown"
-      | "input"
-      | "agent_start"
-      | "agent_end"
-      | "tool_call",
-    handler: (event: unknown, context: SessionContext) => unknown,
-  ): void;
-  sendMessage(
-    message: {
-      customType: string;
-      content: string;
-      display: boolean;
-    },
-    options?: { deliverAs: "followUp"; triggerTurn: boolean },
-  ): void;
-};
+import {
+  createHostAdapter,
+  type ExtensionAPI,
+  type HostAdapter,
+  type SessionContext,
+} from "./lib/host.ts";
 
 type UnreadMessage = {
   id: string;
@@ -42,8 +13,6 @@ type UnreadMessage = {
   subject: string;
 };
 
-const AGENT_MAIL_COMMAND =
-  /(?:^|[;&|]\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*)(?:\S*\/)?agent-mail(?=\s|$)/;
 const CHECK_INTERVAL_MS = 60_000;
 const IDLE_THRESHOLD_MS = 5 * 60_000;
 
@@ -53,45 +22,9 @@ type SessionState = {
   lastActivityAt: number;
   agentRunning: boolean;
   wakeInFlight: boolean;
-  timer?: unknown;
+  stopTimer?: () => void;
   wokenMessages: Set<string>;
 };
-
-const sessions = new Map<string, SessionState>();
-
-function refreshSession(context: SessionContext, pi: ExtensionAPI): void {
-  const sessionId = context.sessionManager.getSessionId();
-  if (!sessionId) return;
-
-  const previous = sessions.get(sessionId);
-  if (previous?.timer !== undefined) previous.context.clearTimer(previous.timer);
-
-  const state: SessionState = {
-    sessionId,
-    context,
-    lastActivityAt: Date.now(),
-    agentRunning: false,
-    wakeInFlight: false,
-    wokenMessages: new Set<string>(),
-  };
-  sessions.set(sessionId, state);
-  state.timer = context.setInterval(() => checkForMail(pi, state), CHECK_INTERVAL_MS);
-}
-
-function stopSession(context: SessionContext): void {
-  const sessionId = context.sessionManager.getSessionId();
-  if (!sessionId) return;
-
-  const state = sessions.get(sessionId);
-  if (!state) return;
-  if (state.timer !== undefined) state.context.clearTimer(state.timer);
-  sessions.delete(sessionId);
-}
-
-function sessionState(context: SessionContext): SessionState | undefined {
-  const sessionId = context.sessionManager.getSessionId();
-  return sessionId ? sessions.get(sessionId) : undefined;
-}
 
 function scanUnread(sessionId: string): UnreadMessage[] {
   try {
@@ -154,45 +87,50 @@ function wakeForMessages(
 
 function checkForMail(pi: ExtensionAPI, state: SessionState): void {
   if (state.agentRunning || state.wakeInFlight) return;
+  if (!state.context.isIdle() || state.context.hasPendingMessages()) return;
   if (Date.now() - state.lastActivityAt < IDLE_THRESHOLD_MS) return;
   wakeForMessages(pi, state, scanUnread(state.sessionId));
 }
 
-function injectIdentityForMail(
-  event: unknown,
-  sessionId: string | undefined,
-): { input: Record<string, unknown> } | undefined {
-  if (!sessionId || typeof event !== "object" || event === null) return;
-  const toolEvent = event as Partial<ToolCallEvent>;
-  if (toolEvent.toolName !== "bash" || !toolEvent.input) return;
-
-  const command = toolEvent.input.command;
-  if (typeof command !== "string" || !AGENT_MAIL_COMMAND.test(command)) return;
-
-  const existingEnv = toolEvent.input.env;
-  const callerEnv =
-    typeof existingEnv === "object" && existingEnv !== null && !Array.isArray(existingEnv)
-      ? (existingEnv as Record<string, unknown>)
-      : {};
-  return {
-    input: {
-      ...toolEvent.input,
-      env: { AGENT_MAIL_ID: sessionId, ...callerEnv },
-    },
-  };
-}
-
 export default function agentMailExtension(pi: ExtensionAPI): void {
-  pi.on("session_start", (_event, context) => {
-    refreshSession(context, pi);
-  });
-  pi.on("session_switch", (_event, context) => {
-    refreshSession(context, pi);
-  });
-  pi.on("session_fork", (_event, context) => {
-    refreshSession(context, pi);
-  });
-  pi.on("session_shutdown", (_event, context) => stopSession(context));
+  let host: HostAdapter | undefined;
+  let active: SessionState | undefined;
+
+  function stopSession(): void {
+    const previous = active;
+    active = undefined;
+    previous?.stopTimer?.();
+  }
+
+  function sessionState(context: SessionContext): SessionState | undefined {
+    return active?.sessionId === context.sessionManager.getSessionId() ? active : undefined;
+  }
+
+  function refreshSession(context: SessionContext): void {
+    if (!host) {
+      host = createHostAdapter(context);
+      host.onSessionChange(pi, refreshSession);
+    }
+    stopSession();
+    const sessionId = context.sessionManager.getSessionId();
+    if (!sessionId) return;
+
+    const state: SessionState = {
+      sessionId,
+      context,
+      lastActivityAt: Date.now(),
+      agentRunning: false,
+      wakeInFlight: false,
+      wokenMessages: new Set<string>(),
+    };
+    active = state;
+    state.stopTimer = host.startTimer(context, () => {
+      if (active === state) checkForMail(pi, state);
+    }, CHECK_INTERVAL_MS);
+  }
+
+  pi.on("session_start", (_event, context) => refreshSession(context));
+  pi.on("session_shutdown", () => stopSession());
   pi.on("input", (_event, context) => {
     const state = sessionState(context);
     if (state) state.lastActivityAt = Date.now();
@@ -216,6 +154,9 @@ export default function agentMailExtension(pi: ExtensionAPI): void {
       state.agentRunning = true;
       state.lastActivityAt = Date.now();
     }
-    return injectIdentityForMail(event, context.sessionManager.getSessionId());
+    return (host ?? createHostAdapter(context)).injectIdentity(
+      event,
+      context.sessionManager.getSessionId(),
+    );
   });
 }
