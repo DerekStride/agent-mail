@@ -101,6 +101,7 @@ test("Pi detects the host from context capabilities and starts a native timer", 
   assert.equal(timerSpy.mock.callCount(), 1);
   assert.equal(timerSpy.mock.calls[0].arguments[1], MINUTE);
   assert.equal(h.handlers.has("session_switch"), false);
+  assert.equal(h.handlers.has("session_branch"), false);
   assert.equal(h.handlers.has("session_fork"), false);
   h.emit("session_shutdown");
   h.emit("session_shutdown");

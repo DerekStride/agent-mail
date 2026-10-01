@@ -113,6 +113,7 @@ test("OMP detects managed timers from capabilities and never uses raw timers", (
     expect(timers).toHaveLength(1);
     expect(timers[0].delay).toBe(MINUTE);
     expect(h.handlers.has("session_switch")).toBe(true);
+    expect(h.handlers.has("session_branch")).toBe(true);
     expect(h.handlers.has("session_fork")).toBe(false);
     h.emit("session_shutdown");
     h.emit("session_shutdown");
@@ -278,6 +279,33 @@ test("OMP switches including forks cancel old timers and reset wakeup state", ()
   }
   expect(h.sent).toHaveLength(3);
   expect(readFileSync(join(root, "scans"), "utf8").trim().split("\n")).toEqual(["omp-new", "omp-resume", "omp-fork"]);
+  h.emit("session_shutdown");
+  expect(timers.every((timer) => timer.cleared)).toBe(true);
+});
+
+test("OMP branching replaces the parent inbox monitor and resets activity", () => {
+  const h = harness("parent-session");
+  h.emit("session_start");
+  tick(5 * MINUTE);
+  expect(h.sent).toHaveLength(1);
+  h.emit("agent_start");
+  const parentTimer = timers[0];
+
+  h.replaceSession("branch-session");
+  h.emit("session_branch", { previousSessionFile: "/parent.jsonl" });
+  expect(parentTimer.cleared).toBe(true);
+  expect(timers).toHaveLength(2);
+  parentTimer.callback();
+  expect(readFileSync(join(root, "scans"), "utf8")).toBe("parent-session\n");
+
+  unread("branch-message");
+  tick(4 * MINUTE);
+  expect(h.sent).toHaveLength(1);
+  tick(MINUTE);
+  expect(readFileSync(join(root, "scans"), "utf8")).toBe("parent-session\nbranch-session\n");
+  expect(h.sent).toHaveLength(2);
+  expect(h.sent[1][0].content).toContain("branch-message");
+
   h.emit("session_shutdown");
   expect(timers.every((timer) => timer.cleared)).toBe(true);
 });

@@ -22,6 +22,7 @@ export type ExtensionAPI = {
     event:
       | "session_start"
       | "session_switch"
+      | "session_branch"
       | "session_shutdown"
       | "input"
       | "agent_start"
@@ -80,8 +81,9 @@ export function createHostAdapter(context: SessionContext): HostAdapter {
     return {
       kind: "omp",
       onSessionChange(api, refresh) {
-        // OMP uses this event for new, resume, and fork; Pi restarts the runtime.
+        // OMP keeps the runtime for switches and branches into new session files.
         api.on("session_switch", (_event, ctx) => refresh(ctx));
+        api.on("session_branch", (_event, ctx) => refresh(ctx));
       },
       startTimer(ctx, callback, delay) {
         const timer = ctx.setInterval!(callback, delay);
