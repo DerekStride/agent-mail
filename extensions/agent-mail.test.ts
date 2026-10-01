@@ -95,7 +95,7 @@ function harness(sessionId = "omp-session") {
 function injected(h: ReturnType<typeof harness>, command = "agent-mail send"): string {
   const event = { toolName: "bash", input: { command, timeout: 10 } };
   const result = h.emit("tool_call", event);
-  expect(event.input).toEqual({ command, timeout: 10 });
+  expect(result?.input).toBe(event.input);
   expect(result?.input.timeout).toBe(10);
   expect(result?.input.env).toBeUndefined();
   return result?.input.command as string;
@@ -131,6 +131,32 @@ test("OMP returns a replacement Bash input and scopes sender identity to the cal
   const output = execFileSync("/bin/bash", ["-c", `${command}\nprintf '%s\\n' "\${AGENT_MAIL_ID-unset}"`], { encoding: "utf8", env: { ...process.env } });
   expect(output).toBe("omp-session'; printf unsafe; #\nunset\n");
   expect(process.env.AGENT_MAIL_ID).toBeUndefined();
+});
+
+test("OMP composes input rewrites with other hooks in either order", () => {
+  const h = harness();
+  h.emit("session_start");
+  for (const mailFirst of [true, false]) {
+    const event = {
+      toolName: "bash",
+      input: { command: 'agent-mail send; printf "%s\\n" "$AGENT_MAIL_TEST_PEER"', timeout: 10 },
+    };
+    const mail = () => h.emit("tool_call", event);
+    const peer = () => {
+      event.input.command = `export AGENT_MAIL_TEST_PEER='peer';\n${event.input.command}`;
+      return { input: event.input };
+    };
+    let executionInput: Record<string, unknown> | undefined;
+    // Match OMP's runner: every hook sees the same event, last replacement wins.
+    for (const handler of mailFirst ? [mail, peer] : [peer, mail]) {
+      const result = handler();
+      if (result?.input) executionInput = result.input;
+    }
+    expect(executionInput).toBe(event.input);
+    expect(executionInput?.timeout).toBe(10);
+    const output = execFileSync("/bin/bash", ["-c", executionInput?.command as string], { encoding: "utf8", env: { ...process.env } });
+    expect(output).toBe("omp-session\npeer\n");
+  }
 });
 
 test("OMP preserves inherited, empty, inline, and shell-local sender overrides", () => {

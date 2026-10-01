@@ -81,7 +81,7 @@ Keep the CLI host-independent: `AGENT_MAIL_ID` is the integration point. Do not 
 
 Encapsulate host differences in `extensions/lib/host.ts`, not in the shared mail workflow. Detect OMP by the presence of both context-managed timer methods (`setInterval` and `clearTimer`); otherwise use the Pi adapter. Do not detect hosts through process environment markers, which nested agents can inherit.
 
-- OMP keeps its managed timers and uses `session_switch` for new/resume/fork transitions. Tool-call argument changes are returned as `{ input }`.
+- OMP keeps its managed timers and uses `session_switch` for new/resume/fork transitions. Tool-call argument changes mutate `event.input` and return it as `{ input }`: OMP passes the same event to every hook and uses the last returned input, so mutation keeps later adapters from overwriting earlier rewrites.
 - Pi uses unreferenced Node timers, cleaned up on `session_shutdown`; `session_start` covers session replacement and reload. Tool-call argument changes mutate `event.input` in place.
 - Neither host's Bash tool consumes `input.env`. For matching `agent-mail` calls, the adapter wraps the command in a subshell that supplies `AGENT_MAIL_ID` only if unset. Inherited values (including empty values) and inline overrides are preserved. All shell state changes in that matching call are scoped to the subshell; the parent shell and unrelated Bash calls are unchanged.
 

@@ -91,9 +91,10 @@ export function createHostAdapter(context: SessionContext): HostAdapter {
         if (!sessionId) return;
         const call = mailInput(event);
         if (!call) return;
-        return {
-          input: { ...call.input, command: withIdentity(call.input.command as string, sessionId) },
-        };
+        // OMP passes the same event to every hook, but only the last returned
+        // input wins. Mutate it too so later hooks preserve this rewrite.
+        call.input.command = withIdentity(call.input.command as string, sessionId);
+        return { input: call.input };
       },
     };
   }

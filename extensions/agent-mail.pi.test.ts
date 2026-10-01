@@ -117,6 +117,27 @@ test("Pi mutates Bash input in place and scopes sender identity to the call", ()
   assert.equal(process.env.AGENT_MAIL_ID, undefined);
 });
 
+test("Pi composes input rewrites with other hooks in either order", () => {
+  const h = harness();
+  h.emit("session_start");
+  for (const mailFirst of [true, false]) {
+    const event = {
+      toolName: "bash",
+      input: { command: 'agent-mail send; printf "%s\\n" "$AGENT_MAIL_TEST_PEER"', timeout: 10 },
+    };
+    const mail = () => h.emit("tool_call", event);
+    const peer = () => {
+      event.input.command = `export AGENT_MAIL_TEST_PEER='peer';\n${event.input.command}`;
+    };
+    for (const handler of mailFirst ? [mail, peer] : [peer, mail]) {
+      assert.equal(handler(), undefined);
+    }
+    assert.equal(event.input.timeout, 10);
+    const output = execFileSync("/bin/bash", ["-c", event.input.command], { encoding: "utf8", env: { ...process.env } });
+    assert.equal(output, "pi-session\npeer\n");
+  }
+});
+
 test("Pi preserves inherited, empty, inline, and shell-local sender overrides", () => {
   const h = harness();
   h.emit("session_start");

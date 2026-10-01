@@ -34,6 +34,8 @@ omp plugin install https://github.com/DerekStride/agent-mail
 pi install git:github.com/DerekStride/agent-mail
 ```
 
+For a local checkout, use `pi install /path/to/agent-mail`. Pi loads the directory in place without copying it or creating a symlink.
+
 The extension identifies the current session when it invokes `agent-mail`, bundles an on-demand workflow skill, and notifies idle sessions about unread mail. Reload your agent after installation.
 
 [`agent-id`](https://github.com/DerekStride/agent-id) is optional. When installed, it gives mailboxes human-readable agent slugs; without it, session IDs work directly.
